@@ -22,9 +22,12 @@ void wii_remote_test();
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
 #define WII_CONTROL_PSM             0x11
 #define WII_DATA_PSM                0x13
-#define WII_DATA_LOCAL_CID          0x41
+#define WII_CONTROL_LOCAL_CID       0x44
+#define WII_DATA_LOCAL_CID          0x45
 
 #define WII_MTU                     672
+
+#define WII_REMOTE_COD          0x002504
 
 #define WII_BUTTON_LEFT         0x0100
 #define WII_BUTTON_RIGHT        0x0200
@@ -46,5 +49,6 @@ void wii_remote_test();
 #define WII_REMOTE_LED_3        0x40
 #define WII_REMOTE_LED_4        0x80
 
-#define WII_REMOTE_PAIRING          1
-#define WII_REMOTE_PAIRED           2
+#define WII_REMOTE_PAIRING_PENDING  1
+#define WII_REMOTE_PAIRING_STARTED  2
+#define WII_REMOTE_PAIRING_COMPLETE 3

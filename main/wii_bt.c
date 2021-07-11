@@ -51,7 +51,7 @@ void handle_read_bd_addr_complete(uint8_t* packet, uint16_t size)
     uint8_t status = packet[6];
     bd_addr_t addr;
     // read_bda(packet + 7, addr);
-    memcpy(device_addr, packet + 7, BD_ADDR_LEN);
+    memcpy(device_addr, packet + 7, BDA_SIZE);
 
     printf("read local address complete, status 0x%02x addr %s\n", status, bda_to_string(addr));
 }
@@ -73,6 +73,11 @@ void handle_auth_code_complete(HCI_AUTH_CODE_COMPLETE_PACKET* packet, const char
 {
     //reverse_bda(packet->addr);
     printf("%s addr %s status 0x%x\n", name, bda_to_string(packet->addr), packet->status);
+}
+
+void handle_write_scan_enable_complete(HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET* packet)
+{
+    printf("write_scan_enable complete status 0x%x\n", packet->status);
 }
 
 void handle_command_complete(uint8_t* packet, uint16_t size)
@@ -100,6 +105,9 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
             break;
         case HCI_OPCODE_LINK_KEY_REQUEST_NEGATIVE_REPLY:
             handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_negative_reply");
+            break;
+        case HCI_OPCODE_WRITE_SCAN_ENABLE:
+            handle_write_scan_enable_complete((HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET*)packet);
             break;
         default:
             printf("unhandled command complete 0x%04x\n", op_code);
@@ -140,6 +148,21 @@ void handle_qos_setup_complete(HCI_QOS_SETUP_COMPLETE_PACKET* packet)
         packet->latency, packet->delay_variation);
 }
 
+void handle_role_change(HCI_ROLE_CHANGE_EVENT_PACKET* packet)
+{
+    printf("role change for %s status 0x%x new_role %u\n", bda_to_string(packet->addr), packet->status, packet->new_role);
+}
+
+void handle_link_key_notification(HCI_LINK_KEY_NOTIFICATION_PACKET* packet)
+{
+    printf("new link key for %s type %u", bda_to_string(packet->addr), packet->type);
+    for (int i = 0; i < HCI_LINK_KEY_SIZE; i++)
+    {
+        printf(" %02x", packet->link_key[i]);
+    }
+    printf("\n");
+}
+
 void dump_packet(const char* prefix, uint8_t* packet, uint16_t size)
 {
     printf("%s size %3u data ", prefix, size);
@@ -174,6 +197,12 @@ int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
                     break;                      
                 case HCI_EVENT_HARDWARE_ERROR:
                     printf("hardware error\n");
+                    break;
+                case HCI_EVENT_ROLE_CHANGE:
+                    handle_role_change((HCI_ROLE_CHANGE_EVENT_PACKET*)packet);
+                    break;
+                case HCI_EVENT_LINK_KEY_NOTIFICATION:
+                    handle_link_key_notification((HCI_LINK_KEY_NOTIFICATION_PACKET*)packet);
                     break;
                 default:
                     if (!handled)

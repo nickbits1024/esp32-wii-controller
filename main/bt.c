@@ -69,6 +69,15 @@ const char* bda_to_string(const bd_addr_t bda)
     return p;
 }
 
+uint32_t cod_to_uint32(const uint8_t* cod)
+{
+    uint32_t cod_uint32 = 0;
+
+    memcpy(&cod_uint32, cod, 3);
+
+    return cod_uint32;
+}
+
 BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size)
 {
     uint16_t packet_size = sizeof(HCI_COMMAND_PACKET) + params_size;
@@ -104,7 +113,7 @@ BT_PACKET_ENVELOPE* create_hci_remote_name_request_packet(const bd_addr_t addr, 
     HCI_REMOTE_NAME_REQUEST_PACKET* packet = (HCI_REMOTE_NAME_REQUEST_PACKET*)env->packet;
 
     //write_bda(packet->addr, addr);
-    memcpy(packet->addr, addr, BD_ADDR_LEN);
+    memcpy(packet->addr, addr, BDA_SIZE);
     packet->psrm = psrm;
     packet->reserved = 0;
     write_uint16_be((uint8_t*)&packet->clock_offset, (clock_offset_valid ? 0x8000 : 0) | clock_offset);
@@ -118,7 +127,7 @@ BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, ui
     HCI_CREATE_CONNECTION_PACKET* packet = (HCI_CREATE_CONNECTION_PACKET*)env->packet;
 
     //write_bda(packet->addr, addr);
-    memcpy(packet->addr, addr, BD_ADDR_LEN);
+    memcpy(packet->addr, addr, BDA_SIZE);
     packet->packet_type = packet_type;
     packet->psrm = psrm;
     packet->reserved = 0x00,
@@ -142,7 +151,7 @@ BT_PACKET_ENVELOPE* create_hci_link_key_request_reply_packet(const bd_addr_t add
     HCI_LINK_KEY_REQUEST_REPLY_PACKET* packet = (HCI_LINK_KEY_REQUEST_REPLY_PACKET*)env->packet;
 
     //write_bda(packet->addr, addr);
-    memcpy(packet->addr, addr, BD_ADDR_LEN);
+    memcpy(packet->addr, addr, BDA_SIZE);
     memcpy(packet->link_key, link_key, HCI_LINK_KEY_SIZE);    
 
     return env;
@@ -154,7 +163,7 @@ BT_PACKET_ENVELOPE* create_hci_link_key_request_negative_packet(const bd_addr_t 
     HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY_PACKET* packet = (HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY_PACKET*)env->packet;
 
     //write_bda(packet->addr, addr);
-    memcpy(packet->addr, addr, BD_ADDR_LEN);
+    memcpy(packet->addr, addr, BDA_SIZE);
 
     return env;
 }
@@ -169,9 +178,52 @@ BT_PACKET_ENVELOPE* create_hci_pin_code_reply_packet(const bd_addr_t addr, const
         return NULL;
     }
     //write_bda(packet->addr, addr);
-    memcpy(packet->addr, addr, BD_ADDR_LEN);
+    memcpy(packet->addr, addr, BDA_SIZE);
     packet->pin_code_size = pin_code_size;
     memcpy(packet->pin_code, pin_code, pin_code_size);
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_write_scan_eanble_packet(uint8_t scan_enable)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_SCAN_ENABLE, PARAMS_SIZE(HCI_WRITE_SCAN_ENABLE_PACKET));
+    HCI_WRITE_SCAN_ENABLE_PACKET* packet = (HCI_WRITE_SCAN_ENABLE_PACKET*)env->packet;
+
+    packet->scan_enable = scan_enable;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_accept_connection_request_packet(bd_addr_t addr, uint8_t role)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_ACCEPT_CONNECTION_REQUEST, PARAMS_SIZE(HCI_ACCEPT_CONNECTION_REQUEST_PACKET));
+    HCI_ACCEPT_CONNECTION_REQUEST_PACKET* packet = (HCI_ACCEPT_CONNECTION_REQUEST_PACKET*)env->packet;
+
+    memcpy(packet->addr, addr, BDA_SIZE);
+    packet->role = role;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_reject_connection_request_packet(bd_addr_t addr, uint8_t reason)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_REJECT_CONNECTION_REQUEST, PARAMS_SIZE(HCI_REJECT_CONNECTION_REQUEST_PACKET));
+    HCI_REJECT_CONNECTION_REQUEST_PACKET* packet = (HCI_REJECT_CONNECTION_REQUEST_PACKET*)env->packet;
+
+    memcpy(packet->addr, addr, BDA_SIZE);
+    packet->reason = reason;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_disconnect_packet(uint16_t con_handle, uint8_t reason)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_DISCONNECT, PARAMS_SIZE(HCI_DISCONNECT_PACKET));
+    HCI_DISCONNECT_PACKET* packet = (HCI_DISCONNECT_PACKET*)env->packet;
+
+    packet->con_handle = con_handle;
+    packet->reason = reason;
 
     return env;
 }
@@ -196,7 +248,7 @@ BT_PACKET_ENVELOPE* create_acl_packet(uint16_t packet_size, uint16_t con_handle,
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_l2cap_connection_request(uint16_t con_handle, uint16_t psm, uint16_t local_cid)
+BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, uint16_t psm, uint16_t local_cid)
 {
     uint16_t size = sizeof(L2CAP_CONNECTION_REQUEST_PACKET);
     uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
@@ -221,7 +273,26 @@ BT_PACKET_ENVELOPE* create_l2cap_connection_request(uint16_t con_handle, uint16_
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_l2cap_config_request(uint16_t con_handle, uint16_t remote_cid, uint16_t flags, uint16_t options_size)
+BT_PACKET_ENVELOPE* create_l2cap_connection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t remote_cid, uint16_t local_cid, uint16_t result, uint16_t status)
+{
+    uint16_t size = sizeof(L2CAP_CONNECTION_RESPONSE_PACKET);
+    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
+
+    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
+    L2CAP_CONNECTION_RESPONSE_PACKET* packet = (L2CAP_CONNECTION_RESPONSE_PACKET*)env->packet;
+
+    packet->code = L2CAP_CONNECTION_RESPONSE;
+    packet->identifier = identifier;
+    packet->payload_size = payload_size;
+    packet->remote_cid = remote_cid;
+    packet->local_cid = local_cid;
+    packet->result = result;
+    packet->status = status;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_l2cap_config_request_packet(uint16_t con_handle, uint16_t remote_cid, uint16_t flags, uint16_t options_size)
 {
     uint16_t size = sizeof(L2CAP_CONFIG_REQUEST_PACKET) + options_size;
     uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
@@ -237,7 +308,7 @@ BT_PACKET_ENVELOPE* create_l2cap_config_request(uint16_t con_handle, uint16_t re
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_l2cap_config_response(uint16_t con_handle, uint16_t local_cid, uint8_t identifier, uint16_t flags, uint16_t options_size)
+BT_PACKET_ENVELOPE* create_l2cap_config_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t local_cid, uint16_t flags, uint16_t options_size)
 {
     uint16_t size = sizeof(L2CAP_CONFIG_RESPONSE_PACKET) + options_size;
     uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
@@ -252,6 +323,23 @@ BT_PACKET_ENVELOPE* create_l2cap_config_response(uint16_t con_handle, uint16_t l
 
     return env;
 }
+
+BT_PACKET_ENVELOPE* create_l2cap_disconnection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t remote_cid, uint16_t local_cid)
+{
+    uint16_t size = sizeof(L2CAP_DISCONNECTION_RESPONSE_PACKET);
+    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
+    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
+    L2CAP_DISCONNECTION_RESPONSE_PACKET* packet = (L2CAP_DISCONNECTION_RESPONSE_PACKET*)env->packet;
+
+    packet->code = L2CAP_DISCONNECTION_RESPONSE;
+    packet->identifier = identifier;
+    packet->payload_size = payload_size;
+    packet->local_cid = local_cid;
+    packet->remote_cid = remote_cid;
+
+    return env;
+}
+
 
 BT_PACKET_ENVELOPE* create_output_report_packet(uint16_t con_handle, uint16_t channel, uint8_t* report, uint16_t report_size)
 {
