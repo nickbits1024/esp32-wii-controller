@@ -15,6 +15,9 @@
 #define OGF_LE_CONTROLLER               0x08
 #define OGF_VENDOR                      0x3f
 
+#define HID_INPUT_REPORT                0xa1
+#define HID_OUTPUT_REPORT               0xa2
+
 #define HCI_OPCODE(ogf, ocf) ((ocf) | ((ogf) << 10))
 
 #define HCI_OPCODE_INQUIRY HCI_OPCODE(OGF_LINK_CONTROL, 0x01)
@@ -325,6 +328,9 @@
 #define L2CAP_CONFIG_RESPONSE       0x05
 #define L2CAP_DISCONNECTION_REQUEST 0x06
 
+#define L2CAP_CONNECTION_SUCCESS    0x00
+#define L2CAP_CONNECTION_PENDING    0x01
+
 #define L2CAP_PB_FIRST_FLUSH        ((uint16_t)2)
 #define L2CAP_BROADCAST_NONE        ((uint16_t)0)
 
@@ -397,6 +403,22 @@ typedef struct
     uint8_t allow_role_switch;
 }
 __attribute__((packed)) HCI_CREATE_CONNECTION_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t status;
+    uint16_t con_handle;
+    uint8_t reserved;
+    uint8_t service_type;
+    uint32_t token_rate;
+    uint32_t peak_bandwidth;
+    uint32_t latency;
+    uint32_t delay_variation;
+}
+__attribute__((packed)) HCI_QOS_SETUP_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -601,5 +623,8 @@ BT_PACKET_ENVELOPE* create_hci_remote_name_request_packet(const bd_addr_t addr, 
 BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, uint16_t packet_type, uint8_t psrm, bool clock_offset_valid, uint16_t clock_offset, uint8_t allow_role_switch);
 BT_PACKET_ENVELOPE* create_l2cap_connection_request(uint16_t con_handle, uint16_t psm, uint16_t local_cid);
 BT_PACKET_ENVELOPE* create_l2cap_config_request(uint16_t con_handle, uint16_t remote_cid, uint16_t flags, uint16_t options_size);
+BT_PACKET_ENVELOPE* create_l2cap_config_response(uint16_t con_handle, uint16_t local_cid, uint8_t identifier, uint16_t flags, uint16_t options_size);
+
+BT_PACKET_ENVELOPE* create_output_report_packet(uint16_t con_handle, uint16_t channel, uint8_t* report, uint16_t report_size);
 
 #endif

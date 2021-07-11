@@ -25,7 +25,7 @@ void send_queue_task(void* p)
     }
 }
 
-void post_bt_packet(void* packet)
+void post_bt_packet(BT_PACKET_ENVELOPE* packet)
 {
     xQueueSend(send_queue_handle, &packet, portMAX_DELAY);
 }
@@ -101,6 +101,16 @@ void handle_number_of_completed_packets(uint8_t* packet, uint16_t size)
     }
 }
 
+void handle_qos_setup_complete(HCI_QOS_SETUP_COMPLETE_PACKET* packet)
+{
+    printf("qos setup handle 0x%04x status 0x%x "
+        "service_type 0x%x token_rate %u peak_bandwidth %u "
+        "latency %u delay_variation %u\n",
+        packet->con_handle, packet->status, 
+        packet->service_type, packet->token_rate, packet->peak_bandwidth, 
+        packet->latency, packet->delay_variation);
+}
+
 void dump_packet(const char* prefix, uint8_t* packet, uint16_t size)
 {
     printf("%s size %3u data ", prefix, size);
@@ -130,6 +140,9 @@ int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
                 case HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS:
                     handle_number_of_completed_packets(packet, size);
                     break;
+                case HCI_EVENT_QOS_SETUP_COMPLETE:
+                    handle_qos_setup_complete((HCI_QOS_SETUP_COMPLETE_PACKET*)packet);
+                    break;                            
                 default:
                     if (!handled)
                     {

@@ -12,7 +12,12 @@ bool found_wii_remote;
 FOUND_DEVICE* found_devices;
 bd_addr_t wii_remote_addr;
 
+bool wii_remote_connected;
+uint16_t wii_remote_con_handle;
+uint16_t wii_remote_data_cid;
+
 void start_wii_remote_pairing(const bd_addr_t addr);
+void send_led_report(uint8_t leds);
 
 void find_wii_remote()
 {
@@ -103,7 +108,7 @@ void handle_connection_complete(uint8_t* packet, uint16_t size)
     printf("connection complete addr %s status 0x%02x handle 0x%04x, link_type %u encrypted %u\n", bda_to_string(addr), status, con_handle, link_type, encryption_enabled);
     if (status == 0)
     {
-        post_bt_packet(create_l2cap_connection_request(con_handle, WII_DATA_PSM, WII_DATA_LOCAL_CHANNEL));
+        post_bt_packet(create_l2cap_connection_request(con_handle, WII_DATA_PSM, WII_DATA_LOCAL_CID));
     }
 }
 
@@ -118,21 +123,39 @@ void handle_disconnection_complete(uint8_t* packet, uint16_t size)
 
 void handle_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_PACKET* response_packet)
 {
-    printf("l2cap conn response handle 0x%04x remote_cid 0x%x local_cid 0x%x result 0x%04x status %x\n",
+    printf("l2cap conn response handle 0x%04x remote_cid 0x%x local_cid 0x%x result 0x%04x status 0x%x\n",
         response_packet->con_handle, response_packet->remote_cid, response_packet->local_cid, response_packet->result, response_packet->status);
 
-    if (response_packet->status == ERROR_CODE_SUCCESS)
+    if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_PENDING)
     {
         uint16_t options_size = sizeof(L2CAP_CONFIG_MTU_OPTION);
-        L2CAP_CONFIG_REQUEST_PACKET* config_packet = create_l2cap_config_request(response_packet->con_handle, response_packet->remote_cid, 0, options_size);
+        BT_PACKET_ENVELOPE* env = create_l2cap_config_request(response_packet->con_handle, response_packet->remote_cid, 0, options_size);
+        L2CAP_CONFIG_REQUEST_PACKET* config_packet = (L2CAP_CONFIG_REQUEST_PACKET*)env->packet;
 
         L2CAP_CONFIG_MTU_OPTION* mtu_option = (L2CAP_CONFIG_MTU_OPTION*)config_packet->options;
         mtu_option->type = L2CAP_CONFIG_MTU_OPTION_TYPE;
         mtu_option->size = sizeof(L2CAP_CONFIG_MTU_OPTION) - sizeof(L2CAP_CONFIG_OPTION);
         mtu_option->mtu = WII_MTU;
 
-        post_bt_packet(config_packet);
+        post_bt_packet(env);
     }
+
+    if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_SUCCESS)
+    {
+        wii_remote_con_handle = response_packet->con_handle;
+        wii_remote_data_cid = response_packet->remote_cid;
+        printf("set wii_remote_con_handle %04x wii_remote_data_cid=0x%x\n", wii_remote_con_handle, wii_remote_data_cid);
+    }
+}
+
+void send_led_report(uint8_t leds)
+{
+    uint8_t report[3];
+    report[0] = HID_OUTPUT_REPORT;
+    report[1] = WII_REMOTE_LED_REPORT;
+    report[2] = leds;
+
+    post_bt_packet(create_output_report_packet(wii_remote_con_handle, wii_remote_data_cid, report, sizeof(report)));
 }
 
 void handle_l2cap_command_reject(L2CAP_COMMAND_REJECT_PACKET* packet)
@@ -142,7 +165,7 @@ void handle_l2cap_command_reject(L2CAP_COMMAND_REJECT_PACKET* packet)
 
 void handle_l2cap_disconnection_request(L2CAP_DISCONNECTION_REQUEST_PACKET* packet)
 {
-    printf("l2cap dis connect request 0x%04x remote_cid 0x%0x local_cid 0x%x\n", packet->con_handle, packet->remote_cid, packet->local_cid);
+    printf("l2cap disconnect request 0x%04x remote_cid 0x%0x local_cid 0x%x\n", packet->con_handle, packet->remote_cid, packet->local_cid);
 }
 
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size)
@@ -164,7 +187,7 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size)
                 break;
             }
             default:
-                printf(" type 0x%02x (size %u)", option_type, option_size);
+                printf(" %s 0x%02x (size %u)", option_type & 0x80 ? "invalid" : "type", option_type, option_size);
                 break;
         }
 
@@ -173,12 +196,20 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size)
     }
 }
 
-void handle_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* packet)
+void handle_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request_packet)
 {
-    uint16_t options_size = packet->payload_size - 4;
-    printf("l2cap config request 0x%04x remote_cid 0x%0x options_size %u options", packet->con_handle, packet->remote_cid, options_size);
-    dump_l2cap_config_options(packet->options, options_size);
+    uint16_t options_size = request_packet->payload_size - 4;
+    printf("l2cap config request 0x%04x remote_cid 0x%0x options_size %u options", request_packet->con_handle, request_packet->remote_cid, options_size);
+    dump_l2cap_config_options(request_packet->options, options_size);
     printf("\n");
+
+    BT_PACKET_ENVELOPE* env = create_l2cap_config_response(request_packet->con_handle, wii_remote_data_cid, request_packet->identifier, request_packet->flags, options_size);
+
+    L2CAP_CONFIG_RESPONSE_PACKET* response_packet = (L2CAP_CONFIG_RESPONSE_PACKET*)env->packet;
+
+    memcpy(response_packet->options, request_packet->options, options_size);
+
+    post_bt_packet(env);
 }
 
 void handle_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packet)
@@ -215,6 +246,51 @@ void handle_l2cap_signal_channel(uint8_t* packet, uint16_t size, uint16_t con_ha
             break;
     }
 }
+
+void dump_button(uint16_t buttons, uint16_t button, const char* name)
+{
+    if ((buttons & button) != 0)
+    {
+        printf(" %s", name);
+    }
+}
+
+void handle_remote_data(L2CAP_PACKET* packet)
+{
+    static uint16_t last_buttons;
+    if (packet->data[0] == HID_INPUT_REPORT)
+    {
+        uint16_t buttons = read_uint16_be(packet->data + 2);
+
+        if (buttons != last_buttons)
+        {
+            if (buttons != 0)
+            {
+                printf("remote buttons: ");
+                dump_button(buttons, WII_BUTTON_LEFT, "Left");
+                dump_button(buttons, WII_BUTTON_RIGHT, "Right");
+                dump_button(buttons, WII_BUTTON_UP, "Up");
+                dump_button(buttons, WII_BUTTON_DOWN, "Down");
+                dump_button(buttons, WII_BUTTON_A, "A");
+                dump_button(buttons, WII_BUTTON_B, "B");
+                dump_button(buttons, WII_BUTTON_PLUS, "Plus");
+                dump_button(buttons, WII_BUTTON_HOME, "Home");
+                dump_button(buttons, WII_BUTTON_MINUS, "Minus");
+                dump_button(buttons, WII_BUTTON_ONE, "One");
+                dump_button(buttons, WII_BUTTON_TWO, "Two");
+                printf("\n");
+            }
+            last_buttons = buttons;
+        }
+
+        if (!wii_remote_connected)
+        {
+            send_led_report(WII_REMOTE_LED_4);
+            wii_remote_connected = true;
+        }
+    }
+}
+
 int wii_remote_packet_handler(uint8_t* packet, uint16_t size)
 {
     dump_packet("recv", packet, size);
@@ -257,7 +333,14 @@ int wii_remote_packet_handler(uint8_t* packet, uint16_t size)
                     handle_l2cap_signal_channel(packet, size, con_handle);
                     break;
                 default:
-                    printf("unhandled l2cap channel %04x con_handle %04x\n", channel, con_handle);
+                    if (channel == WII_DATA_LOCAL_CID)
+                    {
+                        handle_remote_data((L2CAP_PACKET*)packet);
+                    }
+                    else
+                    {
+                        printf("unhandled l2cap channel %04x con_handle %04x\n", channel, con_handle);
+                    }
                     break;
             }
             break;
