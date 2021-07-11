@@ -45,3 +45,6 @@ void wii_remote_test();
 #define WII_REMOTE_LED_2        0x20
 #define WII_REMOTE_LED_3        0x40
 #define WII_REMOTE_LED_4        0x80
+
+#define WII_REMOTE_PAIRING          1
+#define WII_REMOTE_PAIRED           2

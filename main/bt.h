@@ -97,6 +97,7 @@
 #define HCI_OPCODE_READ_PAGE_SCAN_TYPE HCI_OPCODE(OGF_CONTROLLER_BASEBAND,  0x46)
 #define HCI_OPCODE_WRITE_PAGE_SCAN_TYPE HCI_OPCODE(OGF_CONTROLLER_BASEBAND,  0x47)
 #define HCI_OPCODE_WRITE_EXTENDED_INQUIRY_RESPONSE HCI_OPCODE(OGF_CONTROLLER_BASEBAND,  0x52)
+#define HCI_OPCODE_READ_SIMPLE_PAIRING_MODE HCI_OPCODE(OGF_CONTROLLER_BASEBAND,  0x55)
 #define HCI_OPCODE_WRITE_SIMPLE_PAIRING_MODE HCI_OPCODE(OGF_CONTROLLER_BASEBAND,  0x56)
 #define HCI_OPCODE_READ_LOCAL_OOB_DATA HCI_OPCODE(OGF_CONTROLLER_BASEBAND,  0x57)
 #define HCI_OPCODE_WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING HCI_OPCODE(OGF_CONTROLLER_BASEBAND,  0x5B)
@@ -122,8 +123,7 @@
 #define HCI_EVENT_CONNECTION_COMPLETE                      0x03
 #define HCI_EVENT_CONNECTION_REQUEST                       0x04
 #define HCI_EVENT_DISCONNECTION_COMPLETE                   0x05
-#define HCI_EVENT_AUTHENTICATION_COMPLETE                 0x06
-#define HCI_EVENT_AUTHENTICATION_COMPLETE_EVENT HCI_EVENT_AUTHENTICATION_COMPLETE
+#define HCI_EVENT_AUTHENTICATION_COMPLETE                  0x06
 #define HCI_EVENT_REMOTE_NAME_REQUEST_COMPLETE             0x07
 #define HCI_EVENT_ENCRYPTION_CHANGE                        0x08
 #define HCI_EVENT_CHANGE_CONNECTION_LINK_KEY_COMPLETE      0x09
@@ -316,8 +316,9 @@
 #define GAP_IAC_LIMITED_INQUIRY     0x9E8B00L // Limited Dedicated Inquiry Access Code (LIAC)
 
 #define BD_ADDR_LEN                 6
-
-#define HCI_CONN_HANDLE_MASK        0x0fff
+#define HCI_LINK_KEY_SIZE           16
+#define HCI_MAX_PIN_CODE_SIZE       16
+#define HCI_CON_HANDLE_MASK        0x0fff
 
 #define L2CAP_SIGNAL_CHANNEL        0x0001
 
@@ -378,6 +379,17 @@ __attribute__((packed)) HCI_INQUIRY_PACKET;
 
 typedef struct
 {
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    bd_addr_t addr;
+    uint8_t pin_code_size;
+    uint8_t pin_code[HCI_MAX_PIN_CODE_SIZE];
+}
+__attribute__((packed)) HCI_PIN_CODE_REQUEST_REPLY_PACKET;
+
+typedef struct
+{
     //uint16_t size;
     uint8_t type;
     uint16_t op_code;
@@ -407,7 +419,69 @@ __attribute__((packed)) HCI_CREATE_CONNECTION_PACKET;
 typedef struct
 {
     uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    uint16_t con_handle;
+}
+__attribute__((packed)) HCI_AUTHENTICATION_REQUESTED_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    bd_addr_t addr;
+}
+__attribute__((packed)) HCI_LINK_KEY_REQUEST_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    bd_addr_t addr;
+    uint8_t link_key[HCI_LINK_KEY_SIZE];
+}
+__attribute__((packed)) HCI_LINK_KEY_REQUEST_REPLY_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    bd_addr_t addr;
+}
+__attribute__((packed)) HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY_PACKET;
+
+typedef struct
+{
+    uint8_t type;
     uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
+    bd_addr_t addr;
+}
+__attribute__((packed)) HCI_AUTH_CODE_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
+    uint8_t simple_pairing_mode;
+}
+__attribute__((packed)) HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET;
+
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t op_code;
     uint8_t params_size;
     uint8_t status;
     uint16_t con_handle;
@@ -431,6 +505,35 @@ typedef struct
     uint8_t data[];
 }
 __attribute__((packed)) HCI_ACL_PACKET;
+
+// event packets
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    bd_addr_t addr;
+}
+__attribute__((packed)) HCI_LINK_KEY_REQUEST_EVENT_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t status;
+    uint16_t con_handle;
+}
+__attribute__((packed)) HCI_AUTHENTICATION_COMPLETE_EVENT_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    bd_addr_t addr;
+}
+__attribute__((packed)) HCI_PIN_CODE_REQUEST_EVENT_PACKET;
 
 typedef struct
 {
@@ -606,8 +709,9 @@ typedef struct
 }
 __attribute__((packed)) L2CAP_COMMAND_REJECT_PACKET;
 
-void read_bda(const uint8_t* p, bd_addr_t bda);
-void write_bda(uint8_t* p, const bd_addr_t bda);
+//void reverse_bda(bd_addr_t bda);
+//void read_bda(const uint8_t* p, bd_addr_t bda);
+//void write_bda(uint8_t* p, const bd_addr_t bda);
 uint16_t read_uint16(uint8_t* p);
 uint16_t read_uint16_be(uint8_t* p);
 uint32_t read_uint24(const uint8_t* p);
@@ -621,6 +725,11 @@ BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size)
 BT_PACKET_ENVELOPE* create_hci_inquiry_packet(uint32_t lap, uint8_t duration, uint8_t num_responses);
 BT_PACKET_ENVELOPE* create_hci_remote_name_request_packet(const bd_addr_t addr, uint8_t psrm, bool clock_offset_valid, uint16_t clock_offset);
 BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, uint16_t packet_type, uint8_t psrm, bool clock_offset_valid, uint16_t clock_offset, uint8_t allow_role_switch);
+BT_PACKET_ENVELOPE* create_hci_authentication_requested_packet(uint16_t con_handle);
+BT_PACKET_ENVELOPE* create_hci_link_key_request_reply_packet(const bd_addr_t addr, const uint8_t* link_key);
+BT_PACKET_ENVELOPE* create_hci_link_key_request_negative_packet(const bd_addr_t addr);
+BT_PACKET_ENVELOPE* create_hci_pin_code_reply_packet(const bd_addr_t addr, const uint8_t* pin_code, uint8_t pin_code_size);
+
 BT_PACKET_ENVELOPE* create_l2cap_connection_request(uint16_t con_handle, uint16_t psm, uint16_t local_cid);
 BT_PACKET_ENVELOPE* create_l2cap_config_request(uint16_t con_handle, uint16_t remote_cid, uint16_t flags, uint16_t options_size);
 BT_PACKET_ENVELOPE* create_l2cap_config_response(uint16_t con_handle, uint16_t local_cid, uint8_t identifier, uint16_t flags, uint16_t options_size);

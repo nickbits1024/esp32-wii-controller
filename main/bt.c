@@ -1,26 +1,38 @@
 #include "wii_controller.h"
 
+// void reverse_bda(bd_addr_t bda)
+// {
+//     uint8_t temp;
+//     temp = bda[0];
+//     bda[0] = bda[5];
+//     bda[5] = temp;
+//     temp = bda[1];
+//     bda[1] = bda[4];
+//     bda[4] = temp;
+//     temp = bda[2];
+//     bda[2] = bda[3];
+//     bda[3] = temp;
+// }
 
-void read_bda(const uint8_t* p, bd_addr_t bda)
-{
-    bda[0] = p[5];
-    bda[1] = p[4];
-    bda[2] = p[3];
-    bda[3] = p[2];
-    bda[4] = p[1];
-    bda[5] = p[0];
-}
+// void read_bda(const uint8_t* p, bd_addr_t bda)
+// {
+//     // bda[0] = p[5];
+//     // bda[1] = p[4];
+//     // bda[2] = p[3];
+//     // bda[3] = p[2];
+//     // bda[4] = p[1];
+//     // bda[5] = p[0];
+// }
 
-void write_bda(uint8_t* p, const bd_addr_t bda)
-{
-    p[0] = bda[5];
-    p[1] = bda[4];
-    p[2] = bda[3];
-    p[3] = bda[2];
-    p[4] = bda[1];
-    p[5] = bda[0];
-}
-
+// void write_bda(uint8_t* p, const bd_addr_t bda)
+// {
+//     p[0] = bda[5];
+//     p[1] = bda[4];
+//     p[2] = bda[3];
+//     p[3] = bda[2];
+//     p[4] = bda[1];
+//     p[5] = bda[0];
+// }
 
 uint16_t read_uint16(uint8_t* p)
 {
@@ -51,7 +63,8 @@ const char* bda_to_string(const bd_addr_t bda)
 
     char* p = &addr[core][0];
 
-    snprintf(p, 18, "%02x:%02x:%02x:%02x:%02x:%02x", bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
+    //snprintf(p, 18, "%02x:%02x:%02x:%02x:%02x:%02x", bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
+	snprintf(p, 18, "%02x:%02x:%02x:%02x:%02x:%02x", bda[5], bda[4], bda[3], bda[2], bda[1], bda[0]);
 
     return p;
 }
@@ -90,7 +103,8 @@ BT_PACKET_ENVELOPE* create_hci_remote_name_request_packet(const bd_addr_t addr, 
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_REMOTE_NAME_REQUEST, PARAMS_SIZE(HCI_REMOTE_NAME_REQUEST_PACKET));
     HCI_REMOTE_NAME_REQUEST_PACKET* packet = (HCI_REMOTE_NAME_REQUEST_PACKET*)env->packet;
 
-    write_bda(packet->addr, addr);
+    //write_bda(packet->addr, addr);
+    memcpy(packet->addr, addr, BD_ADDR_LEN);
     packet->psrm = psrm;
     packet->reserved = 0;
     write_uint16_be((uint8_t*)&packet->clock_offset, (clock_offset_valid ? 0x8000 : 0) | clock_offset);
@@ -103,12 +117,61 @@ BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, ui
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_CREATE_CONNECTION, PARAMS_SIZE(HCI_CREATE_CONNECTION_PACKET));
     HCI_CREATE_CONNECTION_PACKET* packet = (HCI_CREATE_CONNECTION_PACKET*)env->packet;
 
-    write_bda(packet->addr, addr);
+    //write_bda(packet->addr, addr);
+    memcpy(packet->addr, addr, BD_ADDR_LEN);
     packet->packet_type = packet_type;
     packet->psrm = psrm;
     packet->reserved = 0x00,
     write_uint16_be((uint8_t*)&packet->clock_offset, (clock_offset_valid ? 0x8000 : 0) | clock_offset);
     packet->allow_role_switch = allow_role_switch;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_authentication_requested_packet(uint16_t con_handle)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_AUTHENTICATION_REQUESTED, PARAMS_SIZE(HCI_AUTHENTICATION_REQUESTED_PACKET));
+    HCI_AUTHENTICATION_REQUESTED_PACKET* packet = (HCI_AUTHENTICATION_REQUESTED_PACKET*)env->packet;
+    packet->con_handle = con_handle;
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_link_key_request_reply_packet(const bd_addr_t addr, const uint8_t* link_key)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_LINK_KEY_REQUEST_REPLY, PARAMS_SIZE(HCI_LINK_KEY_REQUEST_REPLY_PACKET));
+    HCI_LINK_KEY_REQUEST_REPLY_PACKET* packet = (HCI_LINK_KEY_REQUEST_REPLY_PACKET*)env->packet;
+
+    //write_bda(packet->addr, addr);
+    memcpy(packet->addr, addr, BD_ADDR_LEN);
+    memcpy(packet->link_key, link_key, HCI_LINK_KEY_SIZE);    
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_link_key_request_negative_packet(const bd_addr_t addr)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_LINK_KEY_REQUEST_NEGATIVE_REPLY, PARAMS_SIZE(HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY_PACKET));
+    HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY_PACKET* packet = (HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY_PACKET*)env->packet;
+
+    //write_bda(packet->addr, addr);
+    memcpy(packet->addr, addr, BD_ADDR_LEN);
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_pin_code_reply_packet(const bd_addr_t addr, const uint8_t* pin_code, uint8_t pin_code_size)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_PIN_CODE_REQUEST_REPLY, PARAMS_SIZE(HCI_PIN_CODE_REQUEST_REPLY_PACKET));
+    HCI_PIN_CODE_REQUEST_REPLY_PACKET* packet = (HCI_PIN_CODE_REQUEST_REPLY_PACKET*)env->packet;
+
+    if (pin_code_size > HCI_MAX_PIN_CODE_SIZE)
+    {
+        return NULL;
+    }
+    //write_bda(packet->addr, addr);
+    memcpy(packet->addr, addr, BD_ADDR_LEN);
+    packet->pin_code_size = pin_code_size;
+    memcpy(packet->pin_code, pin_code, pin_code_size);
 
     return env;
 }

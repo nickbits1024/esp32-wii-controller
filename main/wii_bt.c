@@ -1,6 +1,7 @@
 #include "wii_controller.h"
 
 xQueueHandle send_queue_handle;
+bd_addr_t device_addr;
 
 void send_queue_task(void* p)
 {
@@ -41,24 +42,37 @@ void wii_bt_init()
 
     post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_BD_ADDR, 0));
     post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_LOCAL_NAME, 0));
+    post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_SIMPLE_PAIRING_MODE, 0));    
 }
 
 //void handle_XXX(uint8_t* packet, uint16_t size)
-void handle_read_bd_addr(uint8_t* packet, uint16_t size)
+void handle_read_bd_addr_complete(uint8_t* packet, uint16_t size)
 {
     uint8_t status = packet[6];
     bd_addr_t addr;
-    read_bda(packet + 7, addr);
+    // read_bda(packet + 7, addr);
+    memcpy(device_addr, packet + 7, BD_ADDR_LEN);
 
-    printf("local address status 0x%02x addr %s\n", status, bda_to_string(addr));
+    printf("read local address complete, status 0x%02x addr %s\n", status, bda_to_string(addr));
 }
 
-void handle_read_local_name(uint8_t* packet, uint16_t size)
+void handle_read_simple_pairing_mode_complete(HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET* packet)
+{
+    printf("read simple pairing mode complete, status 0x%x mode %u\n", packet->status, packet->simple_pairing_mode);
+}
+
+void handle_read_local_name_complete(uint8_t* packet, uint16_t size)
 {
     uint8_t status = packet[6];
     char* name = (char*)(packet + 7);
 
-    printf("local name status 0x%02x name %s\n", status, name);
+    printf("read local name complete, status 0x%02x name %s\n", status, name);
+}
+
+void handle_auth_code_complete(HCI_AUTH_CODE_COMPLETE_PACKET* packet, const char* name)
+{
+    //reverse_bda(packet->addr);
+    printf("%s addr %s status 0x%x\n", name, bda_to_string(packet->addr), packet->status);
 }
 
 void handle_command_complete(uint8_t* packet, uint16_t size)
@@ -67,10 +81,25 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
     switch (op_code)
     {
         case HCI_OPCODE_READ_BD_ADDR:
-            handle_read_bd_addr(packet, size);
+            handle_read_bd_addr_complete(packet, size);
             break;
         case HCI_OPCODE_READ_LOCAL_NAME:
-            handle_read_local_name(packet, size);
+            handle_read_local_name_complete(packet, size);
+            break;
+        case HCI_OPCODE_READ_SIMPLE_PAIRING_MODE:
+            handle_read_simple_pairing_mode_complete((HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET*)packet);
+            break;
+        case HCI_OPCODE_PIN_CODE_REQUEST_REPLY:
+            handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_reply");
+            break;
+        case HCI_OPCODE_PIN_CODE_REQUEST_NEGATIVE_REPLY:
+            handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_negative_reply");
+            break;
+        case HCI_OPCODE_LINK_KEY_REQUEST_REPLY:
+            handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_reply");
+            break;
+        case HCI_OPCODE_LINK_KEY_REQUEST_NEGATIVE_REPLY:
+            handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_negative_reply");
             break;
         default:
             printf("unhandled command complete 0x%04x\n", op_code);
@@ -142,7 +171,10 @@ int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
                     break;
                 case HCI_EVENT_QOS_SETUP_COMPLETE:
                     handle_qos_setup_complete((HCI_QOS_SETUP_COMPLETE_PACKET*)packet);
-                    break;                            
+                    break;                      
+                case HCI_EVENT_HARDWARE_ERROR:
+                    printf("hardware error\n");
+                    break;
                 default:
                     if (!handled)
                     {
