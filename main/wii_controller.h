@@ -13,21 +13,30 @@
 #include "bt.h"
 #include "wii_bt.h"
 
-void wii_bt_init();
+void wii_controller_init();
 int wii_remote_packet_handler(uint8_t* packet, uint16_t size);
+int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 void wii_remote_test();
+void emulate_wii_remote();
+void open_data_channel(uint16_t con_handle);
+void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid);
+void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
 #define WII_REMOTE_TEST
 
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
+#define SDP_PSM                     0x01
 #define WII_CONTROL_PSM             0x11
 #define WII_DATA_PSM                0x13
+#define SDP_LOCAL_CID               0x43
 #define WII_CONTROL_LOCAL_CID       0x44
 #define WII_DATA_LOCAL_CID          0x45
+#define LINK_KEY_BLOB_NAME          "link_key"
 
 #define WII_MTU                     672
 
 #define WII_REMOTE_COD          0x002504
+#define WII_COD                 0x000448
 
 #define WII_BUTTON_LEFT         0x0100
 #define WII_BUTTON_RIGHT        0x0200
@@ -49,6 +58,27 @@ void wii_remote_test();
 #define WII_REMOTE_LED_3        0x40
 #define WII_REMOTE_LED_4        0x80
 
-#define WII_REMOTE_PAIRING_PENDING  1
-#define WII_REMOTE_PAIRING_STARTED  2
-#define WII_REMOTE_PAIRING_COMPLETE 3
+typedef enum
+{
+    STATE_WII_CONSOLE_PAIRING_PENDING = 1,
+    STATE_WII_CONSOLE_PAIRING_STARTED,
+    STATE_WII_CONSOLE_PAIRING_COMPLETE,
+    STATE_WII_CONSOLE_POWER_OFF_PENDING,
+    STATE_WII_CONSOLE_POWER_OFF_CONNECTED,
+    STATE_WII_REMOTE_PAIRING_PENDING,
+    STATE_WII_REMOTE_PAIRING_STARTED,
+    STATE_WII_REMOTE_PAIRING_COMPLETE
+} 
+WII_CONTROLLER_STATE;
+
+typedef struct
+{
+    nvs_handle_t nvs_handle;
+    WII_CONTROLLER_STATE state;
+    uint16_t con_handle;
+    uint16_t sdp_cid;
+    uint16_t control_cid;
+    uint16_t data_cid;
+} WII_CONTROLLER;
+
+extern WII_CONTROLLER wii_controller;

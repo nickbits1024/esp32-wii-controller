@@ -23,7 +23,11 @@
         "string_view": "c",
         "initializer_list": "c",
         "bluetooth.h": "c",
-        "random": "c"
+        "random": "c",
+        "typeinfo": "c",
+        "unordered_map": "c",
+        "unordered_set": "c",
+        "string": "c"
     },
     "idf.flashType": "UART",
     "idf.portWin": "COM3"

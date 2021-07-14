@@ -46,7 +46,7 @@ uint16_t read_uint16_be(uint8_t* p)
 
 uint32_t read_uint24(const uint8_t* p)
 {
-    return ((uint32_t) p[0]) | (((uint32_t)p[1]) << 8) | (((uint32_t)p[2]) << 16);
+    return ((uint32_t)p[0]) | (((uint32_t)p[1]) << 8) | (((uint32_t)p[2]) << 16);
 }
 
 void write_uint16_be(uint8_t* p, uint16_t value)
@@ -64,7 +64,7 @@ const char* bda_to_string(const bd_addr_t bda)
     char* p = &addr[core][0];
 
     //snprintf(p, 18, "%02x:%02x:%02x:%02x:%02x:%02x", bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
-	snprintf(p, 18, "%02x:%02x:%02x:%02x:%02x:%02x", bda[5], bda[4], bda[3], bda[2], bda[1], bda[0]);
+    snprintf(p, 18, "%02x:%02x:%02x:%02x:%02x:%02x", bda[5], bda[4], bda[3], bda[2], bda[1], bda[0]);
 
     return p;
 }
@@ -131,7 +131,7 @@ BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, ui
     packet->packet_type = packet_type;
     packet->psrm = psrm;
     packet->reserved = 0x00,
-    write_uint16_be((uint8_t*)&packet->clock_offset, (clock_offset_valid ? 0x8000 : 0) | clock_offset);
+        write_uint16_be((uint8_t*)&packet->clock_offset, (clock_offset_valid ? 0x8000 : 0) | clock_offset);
     packet->allow_role_switch = allow_role_switch;
 
     return env;
@@ -152,7 +152,7 @@ BT_PACKET_ENVELOPE* create_hci_link_key_request_reply_packet(const bd_addr_t add
 
     //write_bda(packet->addr, addr);
     memcpy(packet->addr, addr, BDA_SIZE);
-    memcpy(packet->link_key, link_key, HCI_LINK_KEY_SIZE);    
+    memcpy(packet->link_key, link_key, HCI_LINK_KEY_SIZE);
 
     return env;
 }
@@ -184,6 +184,28 @@ BT_PACKET_ENVELOPE* create_hci_pin_code_reply_packet(const bd_addr_t addr, const
 
     return env;
 }
+
+BT_PACKET_ENVELOPE* create_hci_write_authentication_enable(uint8_t enable)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_AUTHENTICATION_ENABLE, PARAMS_SIZE(HCI_WRITE_AUTHENTICATION_ENABLE_PACKET));
+    HCI_WRITE_AUTHENTICATION_ENABLE_PACKET* packet = (HCI_WRITE_AUTHENTICATION_ENABLE_PACKET*)env->packet;
+
+    packet->authentication_enable = enable;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_set_connection_encryption(uint16_t con_handle, uint8_t encryption_enable)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_SET_CONNECTION_ENCRYPTION, PARAMS_SIZE(HCI_SET_CONNECTION_ENCRYPTION_PACKET));
+    HCI_SET_CONNECTION_ENCRYPTION_PACKET* packet = (HCI_SET_CONNECTION_ENCRYPTION_PACKET*)env->packet;
+
+    packet->con_handle = con_handle;
+    packet->encryption_enable = encryption_enable;
+
+    return env;
+}
+
 
 BT_PACKET_ENVELOPE* create_hci_write_scan_eanble_packet(uint8_t scan_enable)
 {
@@ -228,6 +250,56 @@ BT_PACKET_ENVELOPE* create_hci_disconnect_packet(uint16_t con_handle, uint8_t re
     return env;
 }
 
+BT_PACKET_ENVELOPE* create_hci_write_class_of_device_packet(uint32_t class_of_device)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_CLASS_OF_DEVICE, PARAMS_SIZE(HCI_WRITE_CLASS_OF_DEVICE_PACKET));
+    HCI_WRITE_CLASS_OF_DEVICE_PACKET* packet = (HCI_WRITE_CLASS_OF_DEVICE_PACKET*)env->packet;
+
+    memcpy(&packet->class_of_device, &class_of_device, 3);
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_write_default_link_policy_settings_packet(uint16_t default_link_policy_settings)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_DEFAULT_LINK_POLICY_SETTINGS, PARAMS_SIZE(HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_PACKET));
+    HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_PACKET* packet = (HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_PACKET*)env->packet;
+
+    packet->default_link_policy_settings = default_link_policy_settings;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint16_t secure_connections_host_support)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT, PARAMS_SIZE(HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT_PACKET));
+    HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT_PACKET* packet = (HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT_PACKET*)env->packet;
+
+    packet->secure_connections_host_support  = secure_connections_host_support;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_current_iac_lap_packet(uint32_t iac_lap)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_CURRENT_IAC_LAP, PARAMS_SIZE(HCI_WRITE_CURRENT_IAC_LAP_PACKET));
+    HCI_WRITE_CURRENT_IAC_LAP_PACKET* packet = (HCI_WRITE_CURRENT_IAC_LAP_PACKET*)env->packet;
+
+    packet->num_current_iac = 1;
+    memcpy(&packet->iac_lap, &iac_lap, 3);
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_write_local_name(char* local_name)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_LOCAL_NAME, PARAMS_SIZE(HCI_WRITE_LOCAL_NAME_PACKET));
+    HCI_WRITE_LOCAL_NAME_PACKET* packet = (HCI_WRITE_LOCAL_NAME_PACKET*)env->packet;
+
+    strncpy((char*)packet->local_name, local_name, HCI_MAX_LOCAL_NAME_SIZE);
+
+    return env;
+}
 BT_PACKET_ENVELOPE* create_acl_packet(uint16_t packet_size, uint16_t con_handle, uint16_t channel)
 {
     uint16_t size = sizeof(BT_PACKET_ENVELOPE) + packet_size;
@@ -244,6 +316,17 @@ BT_PACKET_ENVELOPE* create_acl_packet(uint16_t packet_size, uint16_t con_handle,
     packet->hci_acl_size = packet_size - sizeof(HCI_ACL_PACKET);
     packet->l2cap_size = packet_size - sizeof(L2CAP_PACKET);
     packet->channel = channel;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t channel, uint8_t* data, uint16_t data_size)
+{
+    uint16_t size = sizeof(L2CAP_PACKET) + data_size;
+
+    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, channel);
+    L2CAP_PACKET* packet = (L2CAP_PACKET*)env->packet;
+    memcpy(packet->data, data, data_size);
 
     return env;
 }
