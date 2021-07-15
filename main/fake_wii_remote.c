@@ -10,7 +10,7 @@ void send_power_off_disconnect(uint16_t con_handle);
 
 void handle_fake_wii_remote_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACKET* packet)
 {
-    uint32_t cod = cod_to_uint32(packet->class_of_device);
+    uint32_t cod = uint24_bytes_to_uint32(packet->class_of_device);
     printf("connection request from %s cod %06x type %u\n", bda_to_string(packet->addr), cod, packet->link_type);
 
     if (packet->link_type == HCI_LINK_TYPE_ACL && cod == WII_COD)
@@ -30,10 +30,10 @@ void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PA
     printf("connection complete addr %s status 0x%02x handle 0x%04x, link_type %u encrypted %u\n", bda_to_string(packet->addr), packet->status, packet->con_handle, packet->link_type, packet->encryption_enabled);
     if (packet->status == ERROR_CODE_SUCCESS)
     {
+        wii_controller.con_handle = packet->con_handle;
         switch (wii_controller.state)
         {
             case STATE_WII_CONSOLE_PAIRING_PENDING:
-                wii_controller.con_handle = packet->con_handle;
                 memcpy(wii_addr, packet->addr, BDA_SIZE);
 
                 wii_controller.state = STATE_WII_CONSOLE_PAIRING_STARTED;
@@ -43,11 +43,26 @@ void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PA
             case STATE_WII_CONSOLE_POWER_OFF_PENDING:
                 //send_power_off_disconnect(packet->con_handle);
                 wii_controller.state = STATE_WII_CONSOLE_POWER_OFF_CONNECTED;
-                open_data_channel(packet->con_handle);
+                post_bt_packet(create_hci_set_connection_encryption(packet->con_handle, 1));
+                open_control_channel();
+                open_data_channel();
                 break;
             default:
                 break;
         }
+    }
+    else if (packet->status == ERROR_CODE_CONNECTION_REJECTED_DUE_TO_UNACCEPTABLE_BD_ADDR)
+    {
+        switch (wii_controller.state)
+        {
+            // case STATE_WII_CONSOLE_POWER_OFF_PENDING:
+            //     printf("requesting auth...\n");
+            //     post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
+            //     break;
+            default:
+                break;
+        }
+
     }
 }
 
@@ -64,7 +79,7 @@ void handle_fake_wii_remote_link_key_request(HCI_LINK_KEY_REQUEST_EVENT_PACKET* 
             printf("rejecting link key request from %s...\n", bda_to_string(packet->addr));
             post_bt_packet(create_hci_link_key_request_negative_packet(packet->addr));
             break;
-        
+        case STATE_WII_CONSOLE_POWER_OFF_PENDING:
         {
             uint8_t link_key[HCI_LINK_KEY_SIZE];
             size_t size = HCI_LINK_KEY_SIZE;
@@ -96,7 +111,6 @@ void handle_fake_wii_remote_pin_code_request(HCI_PIN_CODE_REQUEST_EVENT_PACKET* 
     {
         case STATE_WII_CONSOLE_PAIRING_PENDING:
         case STATE_WII_CONSOLE_PAIRING_STARTED:
-        case STATE_WII_CONSOLE_POWER_OFF_PENDING:
         {
             uint8_t pin[6];
             //write_bda(pin, device_addr);
@@ -104,13 +118,15 @@ void handle_fake_wii_remote_pin_code_request(HCI_PIN_CODE_REQUEST_EVENT_PACKET* 
             printf("sending pin code %02x %02x %02x %02x %02x %02x\n",
                 pin[0], pin[1], pin[2], pin[3], pin[4], pin[5]);
 
-            post_bt_packet(create_hci_pin_code_reply_packet(packet->addr, pin, BDA_SIZE));
+            post_bt_packet(create_hci_pin_code_request_reply_packet(packet->addr, pin, BDA_SIZE));
+            break;
+        }
+        case STATE_WII_CONSOLE_POWER_OFF_PENDING:
+            post_bt_packet(create_hci_pin_code_request_negative_reply_packet(packet->addr));
             break;
         default:
             break;
-        }
     }
-
 }
 
 void handle_fake_wii_remote_authentication_complete(HCI_AUTHENTICATION_COMPLETE_EVENT_PACKET* packet)
@@ -141,7 +157,7 @@ void handle_fake_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_
     {
         if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_PENDING)
         {
-            post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->remote_cid, WII_MTU);
+            post_l2ap_config_mtu_flush_timeout_request(response_packet->con_handle, response_packet->remote_cid, WII_MTU, WII_FLUSH_TIMEOUT);
         }
     }
 
@@ -197,7 +213,8 @@ void handle_fake_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PA
     }
 
     post_bt_packet(create_l2cap_connection_response_packet(packet->con_handle, packet->identifier, cid, packet->local_cid, 0, ERROR_CODE_SUCCESS));
-    post_l2ap_config_mtu_request(packet->con_handle, packet->local_cid, WII_MTU);
+    //post_l2ap_config_mtu_request(packet->con_handle, packet->local_cid, WII_MTU);
+    post_l2ap_config_mtu_flush_timeout_request(packet->con_handle, packet->local_cid, WII_MTU, WII_FLUSH_TIMEOUT);
 }
 
 void handle_fake_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request_packet)
@@ -291,46 +308,60 @@ typedef struct
     uint16_t request_size;
     char* response;
     uint16_t response_size;
-} SDP_REQUEST_RESPONSE;
+} REQUEST_RESPONSE;
 
-SDP_REQUEST_RESPONSE sdp_request_responses[] = 
+REQUEST_RESPONSE sdp_request_responses[] =
 {
     { "\x02\x00\x00\x00\x08\x35\x03\x19\x11\x24\x00\x15\x00", 13, "\x03\x00\x00\x00\x09\x00\x01\x00\x01\x00\x01\x00\x00\x00", 14 },
-    { "\x04\x00\x01\x00\x0e\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x00", 19, "\x05\x00\x01\x00\x7b\x00\x76\x36\x01\xcc\x09\x00\x00\x0a\x00\x01\x00\x00\x09\x00\x01\x35\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 128 },
+    { "\x04\x00\x01\x00\x0e\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x00", 19, "\x05\x00\x01\x00\x7b\x00\x76\x36\x01\xcc\x09\x00\x00\x0a\x00\x01\x00\x00\x09\x00\x01\x35\x03", 23 },
     { NULL, 0, "\x19\x11\x24\x09\x00\x04\x35\x0d\x35\x06\x19\x01\x00\x09\x00\x11\x35\x03\x19\x00\x11\x09\x00\x05\x35\x03\x19", 27 },
     { NULL, 0, "\x10\x02\x09\x00\x06\x35\x09\x09\x65\x6e\x09\x00\x6a\x09\x01\x00\x09\x00\x09\x35\x08\x35\x06\x19\x11\x24\x09", 27 },
     { NULL, 0, "\x01\x00\x09\x00\x0d\x35\x0f\x35\x0d\x35\x06\x19\x01\x00\x09\x00\x13\x35\x03\x19\x00\x11\x09\x01\x00\x25\x13", 27 },
     { NULL, 0, "\x4e\x69\x6e\x74\x65\x6e\x64\x6f\x20\x52\x56\x4c\x2d\x43\x4e\x54\x2d\x30\x31\x09\x01\x02\x00\x76", 24 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 }
+    { "\x04\x00\x02\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x00\x76", 21, "\x05\x00\x02\x00\x7b\x00\x76\x01\x25\x13\x4e\x69\x6e\x74\x65\x6e\x64\x6f\x20\x52\x56\x4c\x2d", 23 },
+    { NULL, 0, "\x43\x4e\x54\x2d\x30\x31\x09\x01\x02\x25\x08\x4e\x69\x6e\x74\x65\x6e\x64\x6f\x09\x02\x00\x09\x01\x00\x09\x02", 27 },
+    { NULL, 0, "\x01\x09\x01\x11\x09\x02\x02\x08\x04\x09\x02\x03\x08\x33\x09\x02\x04\x28\x00\x09\x02\x05\x28\x01\x09\x02\x06", 27 },
+    { NULL, 0, "\x35\xdf\x35\xdd\x08\x22\x25\xd9\x05\x01\x09\x05\xa1\x01\x85\x10\x15\x00\x26\xff\x00\x75\x08\x95\x01\x06\x00", 27 },
+    { NULL, 0, "\xff\x09\x01\x91\x00\x85\x11\x95\x01\x09\x01\x91\x00\x85\x12\x95\x02\x09\x01\x91\x00\x02\x00\xec", 24 },
+    { "\x04\x00\x03\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x00\xec", 21, "\x05\x00\x03\x00\x7b\x00\x76\x85\x13\x95\x01\x09\x01\x91\x00\x85\x14\x95\x01\x09\x01\x91\x00", 23 },
+    { NULL, 0, "\x85\x15\x95\x01\x09\x01\x91\x00\x85\x16\x95\x15\x09\x01\x91\x00\x85\x17\x95\x06\x09\x01\x91\x00\x85\x18\x95", 27 },
+    { NULL, 0, "\x15\x09\x01\x91\x00\x85\x19\x95\x01\x09\x01\x91\x00\x85\x1a\x95\x01\x09\x01\x91\x00\x85\x20\x95\x06\x09\x01", 27 },
+    { NULL, 0, "\x81\x00\x85\x21\x95\x15\x09\x01\x81\x00\x85\x22\x95\x04\x09\x01\x81\x00\x85\x30\x95\x02\x09\x01\x81\x00\x85", 27 },
+    { NULL, 0, "\x31\x95\x05\x09\x01\x81\x00\x85\x32\x95\x0a\x09\x01\x81\x00\x85\x33\x95\x11\x09\x01\x02\x01\x62", 24 },
+    { "\x04\x00\x04\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x01\x62", 21, "\x05\x00\x04\x00\x70\x00\x6d\x81\x00\x85\x34\x95\x15\x09\x01\x81\x00\x85\x35\x95\x15\x09\x01", 23 },
+    { NULL, 0, "\x81\x00\x85\x36\x95\x15\x09\x01\x81\x00\x85\x37\x95\x15\x09\x01\x81\x00\x85\x3d\x95\x15\x09\x01\x81\x00\x85", 27 },
+    { NULL, 0, "\x3e\x95\x15\x09\x01\x81\x00\x85\x3f\x95\x15\x09\x01\x81\x00\xc0\x09\x02\x07\x35\x08\x35\x06\x09\x04\x09\x09", 27 },
+    { NULL, 0, "\x01\x00\x09\x02\x08\x28\x00\x09\x02\x09\x28\x01\x09\x02\x0a\x28\x01\x09\x02\x0b\x09\x01\x00\x09\x02\x0c\x09", 27 },
+    { NULL, 0, "\x0c\x80\x09\x02\x0d\x28\x00\x09\x02\x0e\x28\x00\x00", 13 }
 };
 
 void handle_fake_wii_remote_sdp_channel(L2CAP_PACKET* packet)
 {
-    int sdp_tx_responses_size = sizeof(sdp_request_responses) / sizeof(SDP_REQUEST_RESPONSE);
-    for (int i = 0; i < sdp_tx_responses_size; i++)
+    int request_responses_size = sizeof(sdp_request_responses) / sizeof(sdp_request_responses);
+    for (int i = 0; i < request_responses_size; i++)
     {
-        const SDP_REQUEST_RESPONSE* rr = &sdp_request_responses[i];
+        const REQUEST_RESPONSE* rr = &sdp_request_responses[i];
         if (packet->l2cap_size == rr->request_size && memcmp(packet->data, rr->request, packet->l2cap_size) == 0)
         {
-            post_sdp_packet((uint8_t*)rr->response, rr->response_size);
-            for (int j = i + 1; j < sdp_tx_responses_size; j++)
+            uint16_t l2cap_size = rr->response_size;
+            for (int j = i + 1; j < request_responses_size; j++)
             {
-                const SDP_REQUEST_RESPONSE* rr2 = &sdp_request_responses[j];
-                if (rr2->request_size == 0 && rr2->request  == NULL && rr2->response_size > 0)
+                const REQUEST_RESPONSE* rr2 = &sdp_request_responses[j];
+                if (rr2->request_size == 0 && rr2->request == NULL && rr2->response_size > 0)
+                {
+                    l2cap_size += rr2->response_size;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            post_sdp_packet(l2cap_size, (uint8_t*)rr->response, rr->response_size);
+            for (int j = i + 1; j < request_responses_size; j++)
+            {
+                const REQUEST_RESPONSE* rr2 = &sdp_request_responses[j];
+                if (rr2->request_size == 0 && rr2->request == NULL && rr2->response_size > 0)
                 {
                     post_sdp_packet_fragment((uint8_t*)rr2->response, rr2->response_size);
                 }
@@ -343,13 +374,80 @@ void handle_fake_wii_remote_sdp_channel(L2CAP_PACKET* packet)
         }
     }
 
-    printf("no sdp response request post_sdp_packet((uint8_t*)\"");
+    printf("no sdp response request post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)\"");
     for (int i = 0; i < packet->l2cap_size; i++)
     {
         printf("\\x%02x", packet->data[i]);
     }
     printf("\", %u);\n", packet->l2cap_size);
 }
+
+REQUEST_RESPONSE hid_request_responses[] =
+{
+    { "\xa2\x17\x00\x00\x17\x70\x00\x01", 8, "\xa1\x21\x00\x00\xf8\x17\x70\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 }
+
+};
+
+void post_hid_request_reponse(HID_REPORT_PACKET* packet, uint16_t size)
+{
+    uint8_t* p = (uint8_t*)packet;
+
+    int request_responses_size = sizeof(hid_request_responses) / sizeof(hid_request_responses);
+    for (int i = 0; i < request_responses_size; i++)
+    {
+        const REQUEST_RESPONSE* rr = &hid_request_responses[i];
+        if (size == rr->request_size && memcmp(p, rr->request, size) == 0)
+        {
+            post_hid_report_packet((uint8_t*)rr->response, rr->response_size);
+            return;
+        }
+    }
+
+    printf("no hid request response post_hid_report_packet((uint8_t*)\"");
+    for (int i = 0; i < size; i++)
+    {
+        printf("\\x%02x", p[i]);
+    }
+    printf("\", %u);\n", size);
+
+}
+
+void handle_fake_wii_remote_data_channel(HID_REPORT_PACKET* packet, uint16_t size)
+{
+    switch (packet->report_type)
+    {
+        case HID_OUTPUT_REPORT:
+        {
+            uint8_t* p = (uint8_t*)packet;
+            printf("recv output report %x\n", packet->report_id);
+            switch (packet->report_id)
+            {
+                case WII_READ_MEMORY_AND_REGISTERS_REPORT:
+                {
+                    WII_READ_MEMORY_AND_REGISTERS_PACKET* report_packet = (WII_READ_MEMORY_AND_REGISTERS_PACKET*)packet;
+
+                    printf("wii remote: read_memory_and_registers address_space %x offset %x size %u\n", report_packet->address_space, bswap32(uint24_bytes_to_uint32(report_packet->offset_bytes)), bswap16(report_packet->size));
+                    break;
+                }
+                default:
+                    printf("unhandled HID output report %x\n", packet->data[1]);
+                    break;
+            }
+            post_hid_request_reponse(packet, size);
+            break;
+        }
+        default:
+            printf("unhandled HID report type %x\n", packet->report_type);
+            break;
+    }
+}
+
 
 int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
 {
@@ -384,19 +482,31 @@ int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
             break;
         case HCI_ACL_DATA_PACKET:
         {
-            L2CAP_PACKET* l2cap_packet = (L2CAP_PACKET*)packet;
+            HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
 
-            switch (l2cap_packet->channel)
+            if (acl_packet->packet_boundary_flag == L2CAP_PB_FIRST_FLUSH)
             {
-                case L2CAP_SIGNAL_CHANNEL:
-                    handle_fake_wii_remote_l2cap_signal_channel((L2CAP_SIGNAL_CHANNEL_PACKET*)l2cap_packet);
-                    break;
-                case SDP_LOCAL_CID:
-                    handle_fake_wii_remote_sdp_channel(l2cap_packet);
-                    break;
-                default:                
-                    printf("unhandled l2cap channel %04x con_handle %04x\n", l2cap_packet->channel, l2cap_packet->con_handle);
-                    break;
+                L2CAP_PACKET* l2cap_packet = (L2CAP_PACKET*)packet;
+
+                switch (l2cap_packet->channel)
+                {
+                    case L2CAP_SIGNAL_CHANNEL:
+                        handle_fake_wii_remote_l2cap_signal_channel((L2CAP_SIGNAL_CHANNEL_PACKET*)l2cap_packet);
+                        break;
+                    case SDP_LOCAL_CID:
+                        handle_fake_wii_remote_sdp_channel(l2cap_packet);
+                        break;
+                    case WII_DATA_LOCAL_CID:
+                        handle_fake_wii_remote_data_channel((HID_REPORT_PACKET*)l2cap_packet->data, l2cap_packet->l2cap_size);
+                        break;
+                    default:
+                        printf("unhandled l2cap channel %04x con_handle %04x\n", l2cap_packet->channel, l2cap_packet->con_handle);
+                        break;
+                }
+            }
+            else
+            {
+                printf("bad packet_boundary_flag %x\n", acl_packet->packet_boundary_flag);
             }
             break;
         }
@@ -423,7 +533,8 @@ void send_disconnect(uint16_t con_handle, uint8_t reason)
 void connect_and_power_off()
 {
     wii_controller.state = STATE_WII_CONSOLE_POWER_OFF_PENDING;
-    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x334, 1, false, 0, 1));
+    //post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x334, 1, false, 0, 1));
+    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x18, 1, false, 0, 1));
 }
 
 void emulate_wii_remote()
@@ -434,6 +545,7 @@ void emulate_wii_remote()
     post_bt_packet(create_hci_write_local_name(WII_REMOTE_NAME));
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
     post_bt_packet(create_hci_write_scan_eanble_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
+    //post_bt_packet(create_hci_write_scan_eanble_packet(HCI_PAGE_SCAN_ENABLE));
     post_bt_packet(create_hci_write_authentication_enable(1));
 
     size_t size = BDA_SIZE;

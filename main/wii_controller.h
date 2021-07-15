@@ -19,8 +19,10 @@ int wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 void wii_remote_test();
 void emulate_wii_remote();
+void open_control_channel();
 void open_data_channel();
-void post_sdp_packet(uint8_t* data, uint16_t data_size);
+void post_hid_report_packet(uint8_t* hid_report, uint16_t report_size);
+void post_sdp_packet(uint16_t l2cap_size, uint8_t* data, uint16_t data_size);
 void post_sdp_packet_fragment(uint8_t* data, uint16_t data_size);
 void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu);
 void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
@@ -37,7 +39,8 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 #define WII_DATA_LOCAL_CID          0x45
 #define LINK_KEY_BLOB_NAME          "link_key"
 
-#define WII_MTU                     672
+#define WII_MTU                     640
+#define WII_FLUSH_TIMEOUT           0xffff
 
 #define WII_REMOTE_COD          0x002504
 #define WII_COD                 0x000448
@@ -55,7 +58,8 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 #define WII_BUTTON_ONE          0x0002
 #define WII_BUTTON_TWO          0x0001
 
-#define WII_REMOTE_LED_REPORT   0x11
+#define WII_LED_REPORT                          0x11
+#define WII_READ_MEMORY_AND_REGISTERS_REPORT    0x17
 
 #define WII_REMOTE_LED_1        0x10
 #define WII_REMOTE_LED_2        0x20
@@ -84,5 +88,23 @@ typedef struct
     uint16_t control_cid;
     uint16_t data_cid;
 } WII_CONTROLLER;
+
+typedef struct
+{
+    uint8_t report_type;
+    uint8_t report_id;
+    uint8_t address_space;
+    uint8_t offset_bytes[3];
+    uint16_t size;
+}
+__attribute__((packed)) WII_READ_MEMORY_AND_REGISTERS_PACKET;
+
+typedef struct
+{
+    uint8_t report_type;
+    uint8_t report_id;
+    uint8_t led_flags;
+}
+__attribute__((packed)) WII_LED_PACKET;
 
 extern WII_CONTROLLER wii_controller;

@@ -1,5 +1,7 @@
 #include "wii_controller.h"
 
+//#define SPOOF_WIIMOTE
+
 void app_main(void)
 {
     bd_addr_t addr;

@@ -350,6 +350,7 @@
 #define L2CAP_BROADCAST_NONE            ((uint16_t)0)
 
 #define INVALID_HANDLE_VALUE            0xffff
+#define AUTO_L2CAP_SIZE                 0
 
 typedef uint8_t bd_addr_t[BDA_SIZE];
 
@@ -402,6 +403,15 @@ typedef struct
     uint8_t pin_code[HCI_MAX_PIN_CODE_SIZE];
 }
 __attribute__((packed)) HCI_PIN_CODE_REQUEST_REPLY_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    bd_addr_t addr;
+}
+__attribute__((packed)) HCI_PIN_CODE_REQUEST_NEGATIVE_REPLY_PACKET;
 
 typedef struct
 {
@@ -735,19 +745,6 @@ typedef struct
 }
 __attribute__((packed)) HCI_DISCONNECTION_COMPLETE_EVENT_PACKET;
 
-
-typedef struct
-{
-    //uint16_t size;
-    uint8_t type;
-    uint16_t con_handle : 12;
-    uint16_t packet_boundary_flag : 2;
-    uint16_t broadcast_flag : 2;
-    uint16_t hci_acl_size;
-    uint8_t data[];
-}
-__attribute__((packed)) HCI_ACL_PACKET;
-
 // event packets
 typedef struct
 {
@@ -832,6 +829,18 @@ typedef struct
     bd_addr_t addr;
 }
 __attribute__((packed)) HCI_PIN_CODE_REQUEST_EVENT_PACKET;
+
+typedef struct
+{
+    //uint16_t size;
+    uint8_t type;
+    uint16_t con_handle : 12;
+    uint16_t packet_boundary_flag : 2;
+    uint16_t broadcast_flag : 2;
+    uint16_t hci_acl_size;
+    uint8_t data[];
+}
+__attribute__((packed)) HCI_ACL_PACKET;
 
 typedef struct
 {
@@ -1052,6 +1061,14 @@ typedef struct
 }
 __attribute__((packed)) L2CAP_COMMAND_REJECT_PACKET;
 
+typedef struct
+{
+    uint8_t report_type;
+    uint8_t report_id;
+    uint8_t data[];
+} 
+__attribute__((packed)) HID_REPORT_PACKET;
+
 //void reverse_bda(bd_addr_t bda);
 //void read_bda(const uint8_t* p, bd_addr_t bda);
 //void write_bda(uint8_t* p, const bd_addr_t bda);
@@ -1059,7 +1076,7 @@ uint16_t read_uint16(uint8_t* p);
 uint16_t read_uint16_be(uint8_t* p);
 uint32_t read_uint24(const uint8_t* p);
 const char* bda_to_string(const bd_addr_t bda);
-uint32_t cod_to_uint32(const uint8_t* cod);
+uint32_t uint24_bytes_to_uint32(const uint8_t* cod);
 
 void write_uint16_be(uint8_t* p, uint16_t value);
 
@@ -1072,7 +1089,8 @@ BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, ui
 BT_PACKET_ENVELOPE* create_hci_authentication_requested_packet(uint16_t con_handle);
 BT_PACKET_ENVELOPE* create_hci_link_key_request_reply_packet(const bd_addr_t addr, const uint8_t* link_key);
 BT_PACKET_ENVELOPE* create_hci_link_key_request_negative_packet(const bd_addr_t addr);
-BT_PACKET_ENVELOPE* create_hci_pin_code_reply_packet(const bd_addr_t addr, const uint8_t* pin_code, uint8_t pin_code_size);
+BT_PACKET_ENVELOPE* create_hci_pin_code_request_reply_packet(const bd_addr_t addr, const uint8_t* pin_code, uint8_t pin_code_size);
+BT_PACKET_ENVELOPE* create_hci_pin_code_request_negative_reply_packet(const bd_addr_t addr);
 BT_PACKET_ENVELOPE* create_hci_write_scan_eanble_packet(uint8_t scan_enable);
 BT_PACKET_ENVELOPE* create_hci_accept_connection_request_packet(bd_addr_t addr, uint8_t role);
 BT_PACKET_ENVELOPE* create_hci_reject_connection_request_packet(bd_addr_t addr, uint8_t reason);
@@ -1086,7 +1104,7 @@ BT_PACKET_ENVELOPE* create_hci_write_default_link_policy_settings_packet(uint16_
 BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint16_t secure_connections_host_support);
 
 BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, uint8_t* data, uint16_t data_size);
-BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t channel, uint8_t* data, uint16_t data_size);
+BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t l2cap_size, uint16_t channel, uint8_t* data, uint16_t data_size);
 BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, uint16_t psm, uint16_t local_cid);
 BT_PACKET_ENVELOPE* create_l2cap_connection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t remote_cid, uint16_t local_cid, uint16_t result, uint16_t status);
 BT_PACKET_ENVELOPE* create_l2cap_config_request_packet(uint16_t con_handle, uint16_t remote_cid, uint16_t flags, uint16_t options_size);

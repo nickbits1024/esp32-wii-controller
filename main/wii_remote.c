@@ -148,14 +148,14 @@ void handle_wii_remote_pin_code_request(HCI_PIN_CODE_REQUEST_EVENT_PACKET* packe
         printf("sending pin code %02x %02x %02x %02x %02x %02x\n",
             pin[0], pin[1], pin[2], pin[3], pin[4], pin[5]);
 
-        post_bt_packet(create_hci_pin_code_reply_packet(packet->addr, pin, BDA_SIZE));
+        post_bt_packet(create_hci_pin_code_request_reply_packet(packet->addr, pin, BDA_SIZE));
     }
 
 }
 
 void handle_wii_remote_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACKET* packet)
 {
-    uint32_t cod = cod_to_uint32(packet->class_of_device);
+    uint32_t cod = uint24_bytes_to_uint32(packet->class_of_device);
     printf("connection request from %s cod %06x type %u\n", bda_to_string(packet->addr), cod, packet->link_type);
 
     if (packet->link_type == HCI_LINK_TYPE_ACL && cod == WII_REMOTE_COD)
@@ -249,12 +249,12 @@ void handle_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PACKET*
     post_l2ap_config_mtu_request(packet->con_handle, packet->local_cid, WII_MTU);
 }
 
-void send_led_report(uint8_t leds)
+void send_led_report(uint8_t led_flags)
 {
     uint8_t report[3];
     report[0] = HID_OUTPUT_REPORT;
-    report[1] = WII_REMOTE_LED_REPORT;
-    report[2] = leds;
+    report[1] = WII_LED_REPORT;
+    report[2] = led_flags;
 
     post_bt_packet(create_output_report_packet(wii_controller.con_handle, wii_controller.data_cid, report, sizeof(report)));
 }
@@ -313,9 +313,9 @@ void handle_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request
 
     switch (request_packet->remote_cid)
     {
-    case SDP_LOCAL_CID:
-        wii_remote_sdp_query();
-        break;
+        case SDP_LOCAL_CID:
+            wii_remote_sdp_query();
+            break;
     }
 }
 
@@ -364,11 +364,12 @@ void handle_wii_remote_sdp_channel(L2CAP_PACKET* packet)
     sdp_response_index++;
     sdp_response_fragment_index = 0;
     printf("sdp response %d.%d \"", sdp_response_index, sdp_response_fragment_index);
-    for (int i = 0; i < packet->l2cap_size; i++)
+    uint16_t data_size = packet->hci_acl_size - (sizeof(L2CAP_PACKET) - sizeof(HCI_ACL_PACKET));
+    for (int i = 0; i < data_size; i++)
     {
         printf("\\x%02x", packet->data[i]);
     }
-    printf("\", %u\n", packet->l2cap_size);
+    printf("\", %u\n", data_size);
 }
 
 void handle_wii_remote_sdp_channel_fragment(HCI_ACL_PACKET* packet)
@@ -391,39 +392,53 @@ void dump_button(uint16_t buttons, uint16_t button, const char* name)
     }
 }
 
-void handle_wii_remote_remote_data(L2CAP_PACKET* packet)
+void handle_wii_remote_remote_data(HID_REPORT_PACKET* packet, uint16_t size)
 {
     static uint16_t last_buttons;
-    if (packet->data[0] == HID_INPUT_REPORT)
+    switch (packet->report_type)
     {
-        uint16_t buttons = read_uint16_be(packet->data + 2);
-
-        if (buttons != last_buttons)
+        case HID_INPUT_REPORT:
         {
-            if (buttons != 0)
+            printf("recv input hid report \"");
+            uint8_t* p = (uint8_t*)packet;
+            for (int i = 0; i < size; i++)
             {
-                printf("remote buttons: ");
-                dump_button(buttons, WII_BUTTON_LEFT, "Left");
-                dump_button(buttons, WII_BUTTON_RIGHT, "Right");
-                dump_button(buttons, WII_BUTTON_UP, "Up");
-                dump_button(buttons, WII_BUTTON_DOWN, "Down");
-                dump_button(buttons, WII_BUTTON_A, "A");
-                dump_button(buttons, WII_BUTTON_B, "B");
-                dump_button(buttons, WII_BUTTON_PLUS, "Plus");
-                dump_button(buttons, WII_BUTTON_HOME, "Home");
-                dump_button(buttons, WII_BUTTON_MINUS, "Minus");
-                dump_button(buttons, WII_BUTTON_ONE, "One");
-                dump_button(buttons, WII_BUTTON_TWO, "Two");
-                printf("\n");
+                printf("\\x%02x", p[i]);
             }
-            last_buttons = buttons;
-        }
+            printf("\", %u\n", size);
+            uint16_t buttons = read_uint16_be(packet->data);
 
-        if (!wii_remote_connection_complete)
-        {
-            wii_remote_connected();
-            wii_remote_connection_complete = true;
+            if (buttons != last_buttons)
+            {
+                if (buttons != 0)
+                {
+                    printf("remote buttons: ");
+                    dump_button(buttons, WII_BUTTON_LEFT, "Left");
+                    dump_button(buttons, WII_BUTTON_RIGHT, "Right");
+                    dump_button(buttons, WII_BUTTON_UP, "Up");
+                    dump_button(buttons, WII_BUTTON_DOWN, "Down");
+                    dump_button(buttons, WII_BUTTON_A, "A");
+                    dump_button(buttons, WII_BUTTON_B, "B");
+                    dump_button(buttons, WII_BUTTON_PLUS, "Plus");
+                    dump_button(buttons, WII_BUTTON_HOME, "Home");
+                    dump_button(buttons, WII_BUTTON_MINUS, "Minus");
+                    dump_button(buttons, WII_BUTTON_ONE, "One");
+                    dump_button(buttons, WII_BUTTON_TWO, "Two");
+                    printf("\n");
+                }
+                last_buttons = buttons;
+            }
+
+            if (!wii_remote_connection_complete)
+            {
+                wii_remote_connected();
+                wii_remote_connection_complete = true;
+            }
+            break;
         }
+        default:
+            printf("unhandled hid report %x\n", packet->report_type);
+            break;
     }
 }
 
@@ -484,7 +499,7 @@ int wii_remote_packet_handler(uint8_t* packet, uint16_t size)
                         handle_wii_remote_l2cap_signal_channel((L2CAP_SIGNAL_CHANNEL_PACKET*)packet);
                         break;
                     case WII_DATA_LOCAL_CID:
-                        handle_wii_remote_remote_data((L2CAP_PACKET*)packet);
+                        handle_wii_remote_remote_data((HID_REPORT_PACKET*)l2cap_packet->data, l2cap_packet->l2cap_size);
                         break;
                     case SDP_LOCAL_CID:
                         handle_wii_remote_sdp_channel((L2CAP_PACKET*)packet);
@@ -498,12 +513,12 @@ int wii_remote_packet_handler(uint8_t* packet, uint16_t size)
             {
                 switch (last_channel)
                 {
-                case SDP_LOCAL_CID:
-                    handle_wii_remote_sdp_channel_fragment((HCI_ACL_PACKET*)packet);
-                    break;
-                default:
-                    printf("unhandled acl fragment in channel 0x%x\n", last_channel);
-                    break;
+                    case SDP_LOCAL_CID:
+                        handle_wii_remote_sdp_channel_fragment((HCI_ACL_PACKET*)packet);
+                        break;
+                    default:
+                        printf("unhandled acl fragment in channel 0x%x\n", last_channel);
+                        break;
                 }
             }
             else
@@ -535,15 +550,20 @@ void start_wii_remote_pairing(const bd_addr_t addr)
 }
 
 void wii_remote_connected()
-{    
+{
     send_led_report(WII_REMOTE_LED_4);
-    post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, SDP_PSM, SDP_LOCAL_CID));
+    //post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, SDP_PSM, SDP_LOCAL_CID));
+
+    post_hid_report_packet(wii_controller.con_handle, wii_controller.data_cid, (uint8_t*)"\xa2\x17\x00\x00\x17\x70\x00\x01", 8);
 }
 
 void wii_remote_sdp_query()
 {
-    post_sdp_packet((uint8_t*)"\x02\x00\x00\x00\x08\x35\x03\x19\x11\x24\x00\x15\x00", 13);
-    post_sdp_packet((uint8_t*)"\x04\x00\x01\x00\x0e\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x00", 19);
+    //post_sdp_packet((uint8_t*)"\x02\x00\x00\x00\x08\x35\x03\x19\x11\x24\x00\x15\x00", 13);
+    //post_sdp_packet((uint8_t*)"\x04\x00\x01\x00\x0e\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x00", 19);
+    //post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)"\x04\x00\x02\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x00\x76", 21);
+    //post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)"\x04\x00\x03\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x00\xec", 21);
+    //post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)"\x04\x00\x04\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x01\x62", 21);
 }
 
 #endif

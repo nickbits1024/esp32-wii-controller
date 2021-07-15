@@ -28,7 +28,8 @@
         "unordered_map": "c",
         "unordered_set": "c",
         "string": "c",
-        "endian.h": "c"
+        "endian.h": "c",
+        "task.h": "c"
     },
     "idf.flashType": "UART",
     "idf.portWin": "COM3"

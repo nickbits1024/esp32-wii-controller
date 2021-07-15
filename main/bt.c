@@ -1,5 +1,7 @@
 #include "wii_controller.h"
 
+uint8_t l2cap_identifier;
+
 // void reverse_bda(bd_addr_t bda)
 // {
 //     uint8_t temp;
@@ -69,13 +71,13 @@ const char* bda_to_string(const bd_addr_t bda)
     return p;
 }
 
-uint32_t cod_to_uint32(const uint8_t* cod)
+uint32_t uint24_bytes_to_uint32(const uint8_t* cod)
 {
-    uint32_t cod_uint32 = 0;
+    uint32_t uint32 = 0;
 
-    memcpy(&cod_uint32, cod, 3);
+    memcpy(&uint32, cod, 3);
 
-    return cod_uint32;
+    return uint32;
 }
 
 BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size)
@@ -168,7 +170,7 @@ BT_PACKET_ENVELOPE* create_hci_link_key_request_negative_packet(const bd_addr_t 
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_hci_pin_code_reply_packet(const bd_addr_t addr, const uint8_t* pin_code, uint8_t pin_code_size)
+BT_PACKET_ENVELOPE* create_hci_pin_code_request_reply_packet(const bd_addr_t addr, const uint8_t* pin_code, uint8_t pin_code_size)
 {
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_PIN_CODE_REQUEST_REPLY, PARAMS_SIZE(HCI_PIN_CODE_REQUEST_REPLY_PACKET));
     HCI_PIN_CODE_REQUEST_REPLY_PACKET* packet = (HCI_PIN_CODE_REQUEST_REPLY_PACKET*)env->packet;
@@ -184,6 +186,17 @@ BT_PACKET_ENVELOPE* create_hci_pin_code_reply_packet(const bd_addr_t addr, const
 
     return env;
 }
+
+BT_PACKET_ENVELOPE* create_hci_pin_code_request_negative_reply_packet(const bd_addr_t addr)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_PIN_CODE_REQUEST_NEGATIVE_REPLY, PARAMS_SIZE(HCI_PIN_CODE_REQUEST_NEGATIVE_REPLY_PACKET));
+    HCI_PIN_CODE_REQUEST_NEGATIVE_REPLY_PACKET* packet = (HCI_PIN_CODE_REQUEST_NEGATIVE_REPLY_PACKET*)env->packet;
+
+    memcpy(packet->addr, addr, BDA_SIZE);
+
+    return env;
+}
+
 
 BT_PACKET_ENVELOPE* create_hci_write_authentication_enable(uint8_t enable)
 {
@@ -306,7 +319,7 @@ BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uin
     uint16_t size = sizeof(BT_PACKET_ENVELOPE) + sizeof(HCI_ACL_PACKET) + data_size;
     BT_PACKET_ENVELOPE* env = (BT_PACKET_ENVELOPE*)malloc(size);
     memset(env, 0, size);
-    env->size = size;
+    env->size = sizeof(HCI_ACL_PACKET) + data_size;
 
     HCI_ACL_PACKET* packet = (HCI_ACL_PACKET*)env->packet;
 
@@ -340,12 +353,16 @@ BT_PACKET_ENVELOPE* create_l2cap_base_packet(uint16_t packet_size, uint16_t con_
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t channel, uint8_t* data, uint16_t data_size)
+BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t l2cap_size, uint16_t channel, uint8_t* data, uint16_t data_size)
 {
     uint16_t size = sizeof(L2CAP_PACKET) + data_size;
 
     BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, channel);
     L2CAP_PACKET* packet = (L2CAP_PACKET*)env->packet;
+    if (l2cap_size != AUTO_L2CAP_SIZE)
+    {
+        packet->l2cap_size = l2cap_size;
+    }
     memcpy(packet->data, data, data_size);
 
     return env;
@@ -360,7 +377,7 @@ BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, 
     L2CAP_CONNECTION_REQUEST_PACKET* packet = (L2CAP_CONNECTION_REQUEST_PACKET*)env->packet;
 
     packet->code = L2CAP_CONNECTION_REQUEST;
-    packet->identifier = 0xdd;
+    packet->identifier = l2cap_identifier++;
     packet->payload_size = payload_size;
     packet->psm = psm;
     packet->local_cid = local_cid;
@@ -403,7 +420,7 @@ BT_PACKET_ENVELOPE* create_l2cap_config_request_packet(uint16_t con_handle, uint
     L2CAP_CONFIG_REQUEST_PACKET* packet = (L2CAP_CONFIG_REQUEST_PACKET*)env->packet;
 
     packet->code = L2CAP_CONFIG_REQUEST;
-    packet->identifier = 0xdd;
+    packet->identifier = l2cap_identifier++;
     packet->payload_size = payload_size;
     packet->remote_cid = remote_cid;
     packet->flags = flags;

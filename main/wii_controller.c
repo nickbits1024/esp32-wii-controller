@@ -306,15 +306,31 @@ int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
     return 0;
 }
 
+void open_control_channel()
+{
+    post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, WII_CONTROL_PSM, WII_CONTROL_LOCAL_CID));
+}
+
 void open_data_channel()
 {
     post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, WII_DATA_PSM, WII_DATA_LOCAL_CID));
 }
 
+void post_hid_report_packet(uint8_t* hid_report, uint16_t report_size)
+{
+    printf("send hid report\"");
+    for (int i = 0; i < report_size; i++)
+    {
+        printf("\\x%02x", hid_report[i]);
+    }
+    printf("\", %u\n", report_size);
+
+}
+
 int sdp_packet_index = -1;
 int sdp_fragment_index = 0;
 
-void post_sdp_packet(uint8_t* data, uint16_t data_size)
+void post_sdp_packet(uint16_t l2cap_size, uint8_t* data, uint16_t data_size)
 {
     sdp_packet_index++;
     sdp_fragment_index = 0;
@@ -326,7 +342,7 @@ void post_sdp_packet(uint8_t* data, uint16_t data_size)
     }
     printf("\", %u\n", data_size);
 
-    post_bt_packet(create_l2cap_packet(wii_controller.con_handle, wii_controller.sdp_cid, data, data_size));
+    post_bt_packet(create_l2cap_packet(wii_controller.con_handle, l2cap_size, wii_controller.sdp_cid, data, data_size));
 }
 
 void post_sdp_packet_fragment(uint8_t* data, uint16_t data_size)
