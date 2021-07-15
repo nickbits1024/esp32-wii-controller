@@ -5,6 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "endian.h"
 #include "nvs_flash.h"
 #include "esp_system.h"
 #include "esp_spi_flash.h"
@@ -18,11 +19,14 @@ int wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 void wii_remote_test();
 void emulate_wii_remote();
-void open_data_channel(uint16_t con_handle);
-void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid);
+void open_data_channel();
+void post_sdp_packet(uint8_t* data, uint16_t data_size);
+void post_sdp_packet_fragment(uint8_t* data, uint16_t data_size);
+void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu);
+void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
-#define WII_REMOTE_TEST
+//#define WII_REMOTE_TEST
 
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
 #define SDP_PSM                     0x01

@@ -182,7 +182,7 @@ void handle_wii_remote_authentication_complete(HCI_AUTHENTICATION_COMPLETE_EVENT
 
         if (packet->status == ERROR_CODE_SUCCESS)
         {
-            open_data_channel(packet->con_handle);
+            open_data_channel();
         }
     }
 }
@@ -192,11 +192,6 @@ void handle_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_PACKE
     printf("l2cap conn response handle 0x%04x remote_cid 0x%x local_cid 0x%x result 0x%04x status 0x%x\n",
         response_packet->con_handle, response_packet->remote_cid, response_packet->local_cid, response_packet->result, response_packet->status);
 
-    if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_PENDING)
-    {
-        post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->remote_cid);
-    }
-
     if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_SUCCESS)
     {
         wii_controller.con_handle = response_packet->con_handle;
@@ -204,15 +199,18 @@ void handle_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_PACKE
         {
             case SDP_LOCAL_CID:
                 wii_controller.sdp_cid = response_packet->remote_cid;
-                printf("set wii_controller.con_handle %04x wii_controller.control_cid=0x%x\n", wii_controller.con_handle, wii_controller.sdp_cid);
+                printf("set wii_controller.con_handle %04x wii_controller.sdp_cid=0x%x\n", wii_controller.con_handle, wii_controller.sdp_cid);
+                post_l2ap_config_mtu_flush_timeout_request(response_packet->con_handle, response_packet->remote_cid, 256, 0xffff);
                 break;
             case WII_CONTROL_LOCAL_CID:
                 wii_controller.control_cid = response_packet->remote_cid;
                 printf("set wii_controller.con_handle %04x wii_controller.control_cid=0x%x\n", wii_controller.con_handle, wii_controller.control_cid);
+                post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->remote_cid, WII_MTU);
                 break;
             case WII_DATA_LOCAL_CID:
                 wii_controller.data_cid = response_packet->remote_cid;
                 printf("set wii_controller.con_handle %04x wii_controller.data_cid=0x%x\n", wii_controller.con_handle, wii_controller.data_cid);
+                post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->remote_cid, WII_MTU);
                 break;
         }
     }
@@ -248,7 +246,7 @@ void handle_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PACKET*
     }
 
     post_bt_packet(create_l2cap_connection_response_packet(packet->con_handle, packet->identifier, cid, packet->local_cid, 0, ERROR_CODE_SUCCESS));
-    post_l2ap_config_mtu_request(packet->con_handle, packet->local_cid);
+    post_l2ap_config_mtu_request(packet->con_handle, packet->local_cid, WII_MTU);
 }
 
 void send_led_report(uint8_t leds)
@@ -281,6 +279,9 @@ void handle_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request
     uint16_t cid;
     switch (request_packet->remote_cid)
     {
+        case SDP_LOCAL_CID:
+            cid = wii_controller.sdp_cid;
+            break;
         case WII_CONTROL_LOCAL_CID:
             cid = wii_controller.control_cid;
             break;
@@ -309,6 +310,13 @@ void handle_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request
     memcpy(response_packet->options, request_packet->options, options_size);
 
     post_bt_packet(env);
+
+    switch (request_packet->remote_cid)
+    {
+    case SDP_LOCAL_CID:
+        wii_remote_sdp_query();
+        break;
+    }
 }
 
 void handle_wii_remote_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packet)
@@ -320,10 +328,9 @@ void handle_wii_remote_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packe
     printf("\n");
 }
 
-void handle_wii_remote_l2cap_signal_channel(uint8_t* packet, uint16_t size, uint16_t con_handle)
+void handle_wii_remote_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
 {
-    uint8_t code = packet[9];
-    switch (code)
+    switch (packet->code)
     {
         case L2CAP_CONNECTION_REQUEST:
             handle_wii_remote_l2cap_connection_request((L2CAP_CONNECTION_REQUEST_PACKET*)packet);
@@ -344,23 +351,36 @@ void handle_wii_remote_l2cap_signal_channel(uint8_t* packet, uint16_t size, uint
             handle_wii_remote_l2cap_disconnection_request((L2CAP_DISCONNECTION_REQUEST_PACKET*)packet);
             break;
         default:
-            printf("unhandled signal channel code 0x%02x\n", code);
+            printf("unhandled signal channel code 0x%02x\n", packet->code);
             break;
     }
 }
 
+int sdp_response_index = -1;
+int sdp_response_fragment_index;
+
 void handle_wii_remote_sdp_channel(L2CAP_PACKET* packet)
 {
-    printf("sdp data { ");
-    if (packet->l2cap_size > 0)
+    sdp_response_index++;
+    sdp_response_fragment_index = 0;
+    printf("sdp response %d.%d \"", sdp_response_index, sdp_response_fragment_index);
+    for (int i = 0; i < packet->l2cap_size; i++)
     {
-        printf("0x%02x", packet->data[0]);
+        printf("\\x%02x", packet->data[i]);
     }
-    for (int i = 1; i < packet->l2cap_size; i++)
+    printf("\", %u\n", packet->l2cap_size);
+}
+
+void handle_wii_remote_sdp_channel_fragment(HCI_ACL_PACKET* packet)
+{
+    sdp_response_fragment_index++;
+
+    printf("sdp response %d.%d \"", sdp_response_index, sdp_response_fragment_index);
+    for (int i = 0; i < packet->hci_acl_size; i++)
     {
-        printf(", 0x%02x", packet->data[i]);
+        printf("\\x%02x", packet->data[i]);
     }
-    printf(" }\n");
+    printf("\", %u\n", packet->hci_acl_size);
 }
 
 void dump_button(uint16_t buttons, uint16_t button, const char* name)
@@ -449,23 +469,46 @@ int wii_remote_packet_handler(uint8_t* packet, uint16_t size)
             break;
         case HCI_ACL_DATA_PACKET:
         {
-            uint16_t con_handle = read_uint16(packet + 1) & HCI_CON_HANDLE_MASK;
-            uint16_t channel = read_uint16(packet + 7);
+            HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
+            L2CAP_PACKET* l2cap_packet = (L2CAP_PACKET*)packet;
 
-            switch (channel)
+            static uint16_t last_channel = INVALID_HANDLE_VALUE;
+
+            if (acl_packet->packet_boundary_flag == L2CAP_PB_FIRST_FLUSH)
             {
-                case L2CAP_SIGNAL_CHANNEL:
-                    handle_wii_remote_l2cap_signal_channel(packet, size, con_handle);
-                    break;
-                case WII_DATA_LOCAL_CID:
-                    handle_wii_remote_remote_data((L2CAP_PACKET*)packet);
-                    break;
+                last_channel = l2cap_packet->channel;
+
+                switch (l2cap_packet->channel)
+                {
+                    case L2CAP_SIGNAL_CHANNEL:
+                        handle_wii_remote_l2cap_signal_channel((L2CAP_SIGNAL_CHANNEL_PACKET*)packet);
+                        break;
+                    case WII_DATA_LOCAL_CID:
+                        handle_wii_remote_remote_data((L2CAP_PACKET*)packet);
+                        break;
+                    case SDP_LOCAL_CID:
+                        handle_wii_remote_sdp_channel((L2CAP_PACKET*)packet);
+                        break;
+                    default:
+                        printf("unhandled l2cap channel %04x con_handle %04x\n", l2cap_packet->channel, l2cap_packet->con_handle);
+                        break;
+                }
+            }
+            else if (acl_packet->packet_boundary_flag == L2CAP_PB_FRAGMENT)
+            {
+                switch (last_channel)
+                {
                 case SDP_LOCAL_CID:
-                    handle_wii_remote_sdp_channel((L2CAP_PACKET*)packet);
+                    handle_wii_remote_sdp_channel_fragment((HCI_ACL_PACKET*)packet);
                     break;
                 default:
-                    printf("unhandled l2cap channel %04x con_handle %04x\n", channel, con_handle);
+                    printf("unhandled acl fragment in channel 0x%x\n", last_channel);
                     break;
+                }
+            }
+            else
+            {
+                printf("bad packet_boundary_flag %x\n", acl_packet->packet_boundary_flag);
             }
             break;
         }
@@ -497,16 +540,10 @@ void wii_remote_connected()
     post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, SDP_PSM, SDP_LOCAL_CID));
 }
 
-void post_sdp_packet(uint8_t* data, uint16_t data_size)
+void wii_remote_sdp_query()
 {
-    post_bt_packet(create_l2cap_packet(wii_controller.con_handle, wii_controller.sdp_cid, data, data_size));
-}
-
-void sdp_query()
-{
-    uint8_t tx0[] = { 0x02, 0x00, 0x00, 0x00, 0x08, 0x35, 0x03, 0x19, 0x11, 0x24, 0x00, 0x15, 0x00 };
-
-    post_sdp_packet(tx0, sizeof(tx0));
+    post_sdp_packet((uint8_t*)"\x02\x00\x00\x00\x08\x35\x03\x19\x11\x24\x00\x15\x00", 13);
+    post_sdp_packet((uint8_t*)"\x04\x00\x01\x00\x0e\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x00", 19);
 }
 
 #endif

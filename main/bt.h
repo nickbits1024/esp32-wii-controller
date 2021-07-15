@@ -346,8 +346,10 @@
 #define L2CAP_CONNECTION_PENDING        0x01
 
 #define L2CAP_PB_FIRST_FLUSH            ((uint16_t)2)
+#define L2CAP_PB_FRAGMENT               ((uint16_t)1)
 #define L2CAP_BROADCAST_NONE            ((uint16_t)0)
 
+#define INVALID_HANDLE_VALUE            0xffff
 
 typedef uint8_t bd_addr_t[BDA_SIZE];
 
@@ -852,6 +854,23 @@ typedef struct
     uint16_t con_handle : 12;
     uint16_t packet_boundary_flag : 2;
     uint16_t broadcast_flag : 2;
+    uint16_t hci_acl_size;
+    uint16_t l2cap_size;
+    uint16_t channel;
+    uint8_t pdu;
+    uint16_t tx_id;
+    uint16_t params_size;
+    uint8_t data[];
+} 
+__attribute__((packed)) L2CAP_SDP_PACKET;
+
+typedef struct
+{
+    //uint16_t size;
+    uint8_t type;
+    uint16_t con_handle : 12;
+    uint16_t packet_boundary_flag : 2;
+    uint16_t broadcast_flag : 2;
     uint16_t acl_size;
     uint16_t l2cap_size;
     uint16_t channel;
@@ -861,7 +880,7 @@ typedef struct
     uint16_t payload_size;
     uint8_t payload[];
 }
-__attribute__((packed)) L2CAP_SIGNAL_PACKET;
+__attribute__((packed)) L2CAP_SIGNAL_CHANNEL_PACKET;
 
 typedef struct
 {
@@ -1066,6 +1085,7 @@ BT_PACKET_ENVELOPE* create_hci_current_iac_lap_packet(uint32_t iac_lap);
 BT_PACKET_ENVELOPE* create_hci_write_default_link_policy_settings_packet(uint16_t default_link_policy_settings);
 BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint16_t secure_connections_host_support);
 
+BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, uint8_t* data, uint16_t data_size);
 BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t channel, uint8_t* data, uint16_t data_size);
 BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, uint16_t psm, uint16_t local_cid);
 BT_PACKET_ENVELOPE* create_l2cap_connection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t remote_cid, uint16_t local_cid, uint16_t result, uint16_t status);

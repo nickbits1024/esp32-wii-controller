@@ -300,7 +300,27 @@ BT_PACKET_ENVELOPE* create_hci_write_local_name(char* local_name)
 
     return env;
 }
-BT_PACKET_ENVELOPE* create_acl_packet(uint16_t packet_size, uint16_t con_handle, uint16_t channel)
+
+BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, uint8_t* data, uint16_t data_size)
+{
+    uint16_t size = sizeof(BT_PACKET_ENVELOPE) + sizeof(HCI_ACL_PACKET) + data_size;
+    BT_PACKET_ENVELOPE* env = (BT_PACKET_ENVELOPE*)malloc(size);
+    memset(env, 0, size);
+    env->size = size;
+
+    HCI_ACL_PACKET* packet = (HCI_ACL_PACKET*)env->packet;
+
+    packet->type = HCI_ACL_DATA_PACKET;
+    packet->con_handle = con_handle;
+    packet->packet_boundary_flag = packet_boundary_flag;
+    packet->broadcast_flag = broadcast_flag;
+    packet->hci_acl_size = data_size;
+    memcpy(packet->data, data, data_size);
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_l2cap_base_packet(uint16_t packet_size, uint16_t con_handle, uint16_t channel)
 {
     uint16_t size = sizeof(BT_PACKET_ENVELOPE) + packet_size;
     BT_PACKET_ENVELOPE* env = (BT_PACKET_ENVELOPE*)malloc(size);
@@ -324,7 +344,7 @@ BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t channel, u
 {
     uint16_t size = sizeof(L2CAP_PACKET) + data_size;
 
-    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, channel);
+    BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, channel);
     L2CAP_PACKET* packet = (L2CAP_PACKET*)env->packet;
     memcpy(packet->data, data, data_size);
 
@@ -334,9 +354,9 @@ BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t channel, u
 BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, uint16_t psm, uint16_t local_cid)
 {
     uint16_t size = sizeof(L2CAP_CONNECTION_REQUEST_PACKET);
-    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
+    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_CHANNEL_PACKET);
 
-    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
+    BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
     L2CAP_CONNECTION_REQUEST_PACKET* packet = (L2CAP_CONNECTION_REQUEST_PACKET*)env->packet;
 
     packet->code = L2CAP_CONNECTION_REQUEST;
@@ -346,7 +366,7 @@ BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, 
     packet->local_cid = local_cid;
 
     // printf("sizeof(L2CAP_CONNECTION_REQUEST_PACKET) = %u\n", sizeof(L2CAP_CONNECTION_REQUEST_PACKET));
-    // printf("sizeof(L2CAP_SIGNAL_PACKET) = %u\n", sizeof(L2CAP_SIGNAL_PACKET));
+    // printf("sizeof(L2CAP_SIGNAL_CHANNEL_PACKET) = %u\n", sizeof(L2CAP_SIGNAL_CHANNEL_PACKET));
     // printf("sizeof(L2CAP_PACKET) = %u\n", sizeof(L2CAP_PACKET));
     // printf("sizeof(HCI_ACL_PACKET) = %u\n", sizeof(HCI_ACL_PACKET));
     // printf("sizeof(BT_PACKET_ENVELOPE) = %u\n", sizeof(BT_PACKET_ENVELOPE));
@@ -359,9 +379,9 @@ BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, 
 BT_PACKET_ENVELOPE* create_l2cap_connection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t remote_cid, uint16_t local_cid, uint16_t result, uint16_t status)
 {
     uint16_t size = sizeof(L2CAP_CONNECTION_RESPONSE_PACKET);
-    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
+    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_CHANNEL_PACKET);
 
-    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
+    BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
     L2CAP_CONNECTION_RESPONSE_PACKET* packet = (L2CAP_CONNECTION_RESPONSE_PACKET*)env->packet;
 
     packet->code = L2CAP_CONNECTION_RESPONSE;
@@ -378,8 +398,8 @@ BT_PACKET_ENVELOPE* create_l2cap_connection_response_packet(uint16_t con_handle,
 BT_PACKET_ENVELOPE* create_l2cap_config_request_packet(uint16_t con_handle, uint16_t remote_cid, uint16_t flags, uint16_t options_size)
 {
     uint16_t size = sizeof(L2CAP_CONFIG_REQUEST_PACKET) + options_size;
-    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
-    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
+    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_CHANNEL_PACKET);
+    BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
     L2CAP_CONFIG_REQUEST_PACKET* packet = (L2CAP_CONFIG_REQUEST_PACKET*)env->packet;
 
     packet->code = L2CAP_CONFIG_REQUEST;
@@ -394,8 +414,8 @@ BT_PACKET_ENVELOPE* create_l2cap_config_request_packet(uint16_t con_handle, uint
 BT_PACKET_ENVELOPE* create_l2cap_config_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t local_cid, uint16_t flags, uint16_t options_size)
 {
     uint16_t size = sizeof(L2CAP_CONFIG_RESPONSE_PACKET) + options_size;
-    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
-    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
+    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_CHANNEL_PACKET);
+    BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
     L2CAP_CONFIG_RESPONSE_PACKET* packet = (L2CAP_CONFIG_RESPONSE_PACKET*)env->packet;
 
     packet->code = L2CAP_CONFIG_RESPONSE;
@@ -410,8 +430,8 @@ BT_PACKET_ENVELOPE* create_l2cap_config_response_packet(uint16_t con_handle, uin
 BT_PACKET_ENVELOPE* create_l2cap_disconnection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t remote_cid, uint16_t local_cid)
 {
     uint16_t size = sizeof(L2CAP_DISCONNECTION_RESPONSE_PACKET);
-    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_PACKET);
-    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
+    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_CHANNEL_PACKET);
+    BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
     L2CAP_DISCONNECTION_RESPONSE_PACKET* packet = (L2CAP_DISCONNECTION_RESPONSE_PACKET*)env->packet;
 
     packet->code = L2CAP_DISCONNECTION_RESPONSE;
@@ -427,7 +447,7 @@ BT_PACKET_ENVELOPE* create_l2cap_disconnection_response_packet(uint16_t con_hand
 BT_PACKET_ENVELOPE* create_output_report_packet(uint16_t con_handle, uint16_t channel, uint8_t* report, uint16_t report_size)
 {
     uint16_t size = sizeof(L2CAP_PACKET) + report_size;
-    BT_PACKET_ENVELOPE* env = create_acl_packet(size, con_handle, channel);
+    BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, channel);
     L2CAP_PACKET* packet = (L2CAP_PACKET*)env->packet;
     memcpy(packet->data, report, report_size);
 

@@ -141,7 +141,7 @@ void handle_fake_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_
     {
         if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_PENDING)
         {
-            post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->remote_cid);
+            post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->remote_cid, WII_MTU);
         }
     }
 
@@ -197,7 +197,7 @@ void handle_fake_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PA
     }
 
     post_bt_packet(create_l2cap_connection_response_packet(packet->con_handle, packet->identifier, cid, packet->local_cid, 0, ERROR_CODE_SUCCESS));
-    post_l2ap_config_mtu_request(packet->con_handle, packet->local_cid);
+    post_l2ap_config_mtu_request(packet->con_handle, packet->local_cid, WII_MTU);
 }
 
 void handle_fake_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request_packet)
@@ -257,7 +257,7 @@ void handle_fake_wii_remote_l2cap_disconnection_request(L2CAP_DISCONNECTION_REQU
     //post_bt_packet(create_hci_disconnect_packet(packet->con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION));
 }
 
-void handle_fake_wii_remote_l2cap_signal_channel(L2CAP_SIGNAL_PACKET* packet)
+void handle_fake_wii_remote_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
 {
     switch (packet->code)
     {
@@ -285,18 +285,70 @@ void handle_fake_wii_remote_l2cap_signal_channel(L2CAP_SIGNAL_PACKET* packet)
     }
 }
 
+typedef struct
+{
+    char* request;
+    uint16_t request_size;
+    char* response;
+    uint16_t response_size;
+} SDP_REQUEST_RESPONSE;
+
+SDP_REQUEST_RESPONSE sdp_request_responses[] = 
+{
+    { "\x02\x00\x00\x00\x08\x35\x03\x19\x11\x24\x00\x15\x00", 13, "\x03\x00\x00\x00\x09\x00\x01\x00\x01\x00\x01\x00\x00\x00", 14 },
+    { "\x04\x00\x01\x00\x0e\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x00", 19, "\x05\x00\x01\x00\x7b\x00\x76\x36\x01\xcc\x09\x00\x00\x0a\x00\x01\x00\x00\x09\x00\x01\x35\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 128 },
+    { NULL, 0, "\x19\x11\x24\x09\x00\x04\x35\x0d\x35\x06\x19\x01\x00\x09\x00\x11\x35\x03\x19\x00\x11\x09\x00\x05\x35\x03\x19", 27 },
+    { NULL, 0, "\x10\x02\x09\x00\x06\x35\x09\x09\x65\x6e\x09\x00\x6a\x09\x01\x00\x09\x00\x09\x35\x08\x35\x06\x19\x11\x24\x09", 27 },
+    { NULL, 0, "\x01\x00\x09\x00\x0d\x35\x0f\x35\x0d\x35\x06\x19\x01\x00\x09\x00\x13\x35\x03\x19\x00\x11\x09\x01\x00\x25\x13", 27 },
+    { NULL, 0, "\x4e\x69\x6e\x74\x65\x6e\x64\x6f\x20\x52\x56\x4c\x2d\x43\x4e\x54\x2d\x30\x31\x09\x01\x02\x00\x76", 24 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 }
+};
+
 void handle_fake_wii_remote_sdp_channel(L2CAP_PACKET* packet)
 {
-    printf("sdp request { ");
-    if (packet->l2cap_size > 0)
+    int sdp_tx_responses_size = sizeof(sdp_request_responses) / sizeof(SDP_REQUEST_RESPONSE);
+    for (int i = 0; i < sdp_tx_responses_size; i++)
     {
-        printf("0x%02x", packet->data[0]);
+        const SDP_REQUEST_RESPONSE* rr = &sdp_request_responses[i];
+        if (packet->l2cap_size == rr->request_size && memcmp(packet->data, rr->request, packet->l2cap_size) == 0)
+        {
+            post_sdp_packet((uint8_t*)rr->response, rr->response_size);
+            for (int j = i + 1; j < sdp_tx_responses_size; j++)
+            {
+                const SDP_REQUEST_RESPONSE* rr2 = &sdp_request_responses[j];
+                if (rr2->request_size == 0 && rr2->request  == NULL && rr2->response_size > 0)
+                {
+                    post_sdp_packet_fragment((uint8_t*)rr2->response, rr2->response_size);
+                }
+                else
+                {
+                    break;
+                }
+            }
+            return;
+        }
     }
-    for (int i = 1; i < packet->l2cap_size; i++)
+
+    printf("no sdp response request post_sdp_packet((uint8_t*)\"");
+    for (int i = 0; i < packet->l2cap_size; i++)
     {
-        printf(", 0x%02x", packet->data[i]);
+        printf("\\x%02x", packet->data[i]);
     }
-    printf(" }\n");
+    printf("\", %u);\n", packet->l2cap_size);
 }
 
 int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
@@ -337,7 +389,7 @@ int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
             switch (l2cap_packet->channel)
             {
                 case L2CAP_SIGNAL_CHANNEL:
-                    handle_fake_wii_remote_l2cap_signal_channel((L2CAP_SIGNAL_PACKET*)l2cap_packet);
+                    handle_fake_wii_remote_l2cap_signal_channel((L2CAP_SIGNAL_CHANNEL_PACKET*)l2cap_packet);
                     break;
                 case SDP_LOCAL_CID:
                     handle_fake_wii_remote_sdp_channel(l2cap_packet);

@@ -306,12 +306,44 @@ int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
     return 0;
 }
 
-void open_data_channel(uint16_t con_handle)
+void open_data_channel()
 {
-    post_bt_packet(create_l2cap_connection_request_packet(con_handle, WII_DATA_PSM, WII_DATA_LOCAL_CID));
+    post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, WII_DATA_PSM, WII_DATA_LOCAL_CID));
 }
 
-void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid)
+int sdp_packet_index = -1;
+int sdp_fragment_index = 0;
+
+void post_sdp_packet(uint8_t* data, uint16_t data_size)
+{
+    sdp_packet_index++;
+    sdp_fragment_index = 0;
+
+    printf("sdp request %d.%d \"", sdp_packet_index, sdp_fragment_index);
+    for (int i = 0; i < data_size; i++)
+    {
+        printf("\\x%02x", data[i]);
+    }
+    printf("\", %u\n", data_size);
+
+    post_bt_packet(create_l2cap_packet(wii_controller.con_handle, wii_controller.sdp_cid, data, data_size));
+}
+
+void post_sdp_packet_fragment(uint8_t* data, uint16_t data_size)
+{
+    sdp_fragment_index++;
+
+    printf("sdp request %d.%d \"", sdp_packet_index, sdp_fragment_index);
+    for (int i = 0; i < data_size; i++)
+    {
+        printf("\\x%02x", data[i]);
+    }
+    printf("\", %u\n", data_size);
+
+    post_bt_packet(create_acl_packet(wii_controller.con_handle, wii_controller.sdp_cid, L2CAP_PB_FRAGMENT, L2CAP_BROADCAST_NONE, data, data_size));
+}
+
+void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu)
 {
     uint16_t options_size = sizeof(L2CAP_CONFIG_MTU_OPTION);
     BT_PACKET_ENVELOPE* env = create_l2cap_config_request_packet(con_handle, remote_cid, 0, options_size);
@@ -320,10 +352,29 @@ void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid)
     L2CAP_CONFIG_MTU_OPTION* mtu_option = (L2CAP_CONFIG_MTU_OPTION*)config_packet->options;
     mtu_option->type = L2CAP_CONFIG_MTU_OPTION_TYPE;
     mtu_option->size = sizeof(L2CAP_CONFIG_MTU_OPTION) - sizeof(L2CAP_CONFIG_OPTION);
-    mtu_option->mtu = WII_MTU;
+    mtu_option->mtu = mtu;
 
     post_bt_packet(env);
 }
+
+void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout)
+{
+    uint16_t options_size = sizeof(L2CAP_CONFIG_MTU_OPTION) + sizeof(L2CAP_CONFIG_FLUSH_TIMEOUT_OPTION);
+    BT_PACKET_ENVELOPE* env = create_l2cap_config_request_packet(con_handle, remote_cid, 0, options_size);
+    L2CAP_CONFIG_REQUEST_PACKET* config_packet = (L2CAP_CONFIG_REQUEST_PACKET*)env->packet;
+
+    L2CAP_CONFIG_MTU_OPTION* mtu_option = (L2CAP_CONFIG_MTU_OPTION*)config_packet->options;
+    mtu_option->type = L2CAP_CONFIG_MTU_OPTION_TYPE;
+    mtu_option->size = sizeof(L2CAP_CONFIG_MTU_OPTION) - sizeof(L2CAP_CONFIG_OPTION);
+    mtu_option->mtu = mtu;
+    L2CAP_CONFIG_FLUSH_TIMEOUT_OPTION* flush_option = (L2CAP_CONFIG_FLUSH_TIMEOUT_OPTION*)(mtu_option + 1);
+    flush_option->type = L2CAP_CONFIG_FLUSH_TIMEOUT_OPTION_TYPE;
+    flush_option->size = sizeof(L2CAP_CONFIG_FLUSH_TIMEOUT_OPTION) - sizeof(L2CAP_CONFIG_OPTION);
+    flush_option->flush_timeout = flush_timeout;
+
+    post_bt_packet(env);
+}
+
 
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size)
 {
