@@ -29,7 +29,8 @@
         "unordered_set": "c",
         "string": "c",
         "endian.h": "c",
-        "task.h": "c"
+        "task.h": "c",
+        "*.ipp": "c"
     },
     "idf.flashType": "UART",
     "idf.portWin": "COM3"

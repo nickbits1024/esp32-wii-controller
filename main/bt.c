@@ -97,6 +97,11 @@ BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size)
     return env;
 }
 
+BT_PACKET_ENVELOPE* create_hci_reset_packet()
+{
+    return create_hci_cmd_packet(HCI_OPCODE_RESET, 0);
+}
+
 BT_PACKET_ENVELOPE* create_hci_inquiry_packet(uint32_t lap, uint8_t duration, uint8_t num_responses)
 {
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_INQUIRY, PARAMS_SIZE(HCI_INQUIRY_PACKET));

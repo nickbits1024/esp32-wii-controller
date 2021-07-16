@@ -337,7 +337,7 @@ REQUEST_RESPONSE sdp_request_responses[] =
 
 void handle_fake_wii_remote_sdp_channel(L2CAP_PACKET* packet)
 {
-    int request_responses_size = sizeof(sdp_request_responses) / sizeof(sdp_request_responses);
+    int request_responses_size = sizeof(sdp_request_responses) / sizeof(REQUEST_RESPONSE);
     for (int i = 0; i < request_responses_size; i++)
     {
         const REQUEST_RESPONSE* rr = &sdp_request_responses[i];
@@ -385,26 +385,57 @@ void handle_fake_wii_remote_sdp_channel(L2CAP_PACKET* packet)
 REQUEST_RESPONSE hid_request_responses[] =
 {
     { "\xa2\x17\x00\x00\x17\x70\x00\x01", 8, "\xa1\x21\x00\x00\xf8\x17\x70\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { "\xa2\x12\x06\x30", 4, "\xa1\x22\x00\x00\x12\x00", 6 },
+    { NULL, 0, "\xa1\x30\x00\x00", 4 },
+    { "\xa2\x1a\x02", 3, "\xa1\x22\x00\x00\x1a\x00", 6 },
+    { "\xa2\x11\x12", 3, "\xa1\x22\x00\x00\x11\x00", 6 },
+    { "\xa2\x17\x00\x00\x00\x2a\x00\x38", 8, "\xa1\x21\x00\x00\xf0\x00\x3a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0, "\xa1\x21\x00\x00\xf0\x00\x4a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0, "\xa1\x21\x00\x00\x70\x00\x5a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { "\xa2\x17\x00\x00\x00\x62\x00\x38", 8, "\xa1\x21\x00\x00\xf0\x00\x62\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0, "\xa1\x21\x00\x00\xf0\x00\x72\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0, "\xa1\x21\x00\x00\xf0\x00\x82\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0, "\xa1\x21\x00\x00\x70\x00\x92\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { "\xa2\x17\x00\x00\x00\x00\x00\x2a", 8, "\xa1\x21\x00\x00\xf0\x00\x00\x64\xd2\x8b\x68\xd7\x6c\x89\x03\x6c\x91\x4a\x64\xd2\x8b\x68\xd7", 23 },
+    { NULL, 0, "\xa1\x21\x00\x00\xf0\x00\x10\x6c\x89\x03\x6c\x91\x4a\x7f\x81\x83\x19\x99\x9b\x9c\x0a\x40\x0b", 23 },
+    { NULL, 0, "\xa1\x21\x00\x00\x90\x00\x20\x7f\x81\x83\x19\x99\x9b\x9c\x0a\x40\x0b\x00\x00\x00\x00\x00\x00", 23 },
+    { "\xa2\x15\x00", 3, "\xa1\x20\x00\x00\x80\x00\x00\x7d", 8 },
+    { "\xa2\x13\x06", 3, "\xa1\x22\x00\x00\x13\x00", 6 },
+    { "\xa2\x1a\x06", 3, "\xa1\x22\x00\x00\x1a\x00", 6 },
+    { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x14\xbc\xc4\x00\x00\x00\x07\x00\x00\x00\x02\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
+    { NULL, 0, NULL, 0 },
+    { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 }
-
 };
 
 void post_hid_request_reponse(HID_REPORT_PACKET* packet, uint16_t size)
 {
     uint8_t* p = (uint8_t*)packet;
 
-    int request_responses_size = sizeof(hid_request_responses) / sizeof(hid_request_responses);
+    int request_responses_size = sizeof(hid_request_responses) / sizeof(REQUEST_RESPONSE);
     for (int i = 0; i < request_responses_size; i++)
     {
         const REQUEST_RESPONSE* rr = &hid_request_responses[i];
         if (size == rr->request_size && memcmp(p, rr->request, size) == 0)
         {
             post_hid_report_packet((uint8_t*)rr->response, rr->response_size);
+            for (int j = i + 1; j < request_responses_size; j++)
+            {
+                const REQUEST_RESPONSE* rr2 = &hid_request_responses[j];
+                if (rr2->request_size == 0 && rr2->request == NULL && rr2->response_size > 0)
+                {
+                    post_hid_report_packet((uint8_t*)rr2->response, rr2->response_size);   
+                }
+                else
+                {
+                    break;
+                }
+            }
             return;
         }
     }
@@ -415,7 +446,7 @@ void post_hid_request_reponse(HID_REPORT_PACKET* packet, uint16_t size)
         printf("\\x%02x", p[i]);
     }
     printf("\", %u);\n", size);
-
+    send_disconnect(wii_controller.con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION);
 }
 
 void handle_fake_wii_remote_data_channel(HID_REPORT_PACKET* packet, uint16_t size)
@@ -424,26 +455,31 @@ void handle_fake_wii_remote_data_channel(HID_REPORT_PACKET* packet, uint16_t siz
     {
         case HID_OUTPUT_REPORT:
         {
-            uint8_t* p = (uint8_t*)packet;
-            printf("recv output report %x\n", packet->report_id);
+            printf("recv output report 0x%x\n", packet->report_id);
             switch (packet->report_id)
             {
                 case WII_READ_MEMORY_AND_REGISTERS_REPORT:
                 {
                     WII_READ_MEMORY_AND_REGISTERS_PACKET* report_packet = (WII_READ_MEMORY_AND_REGISTERS_PACKET*)packet;
 
-                    printf("wii remote: read_memory_and_registers address_space %x offset %x size %u\n", report_packet->address_space, bswap32(uint24_bytes_to_uint32(report_packet->offset_bytes)), bswap16(report_packet->size));
+                    printf("read_memory_and_registers address_space %x offset %x size %u\n", report_packet->address_space, bswap32(uint24_bytes_to_uint32(report_packet->offset_bytes) << 8), bswap16(report_packet->size));
+                    break;
+                }
+                case WII_DATA_REPORTING_MODE_REPORT:
+                {
+                    WII_DATA_REPORTING_MODE_PACKET* drm_mode_packet = (WII_DATA_REPORTING_MODE_PACKET*)packet;
+                    printf("data_reporting_mode continuous_reporting %u data_report_id %x\n", drm_mode_packet->continus_reporting_flag, drm_mode_packet->data_report_id);
                     break;
                 }
                 default:
-                    printf("unhandled HID output report %x\n", packet->data[1]);
+                    printf("unhandled HID output report %x\n", packet->report_id);
                     break;
             }
             post_hid_request_reponse(packet, size);
             break;
         }
         default:
-            printf("unhandled HID report type %x\n", packet->report_type);
+            printf("unhandled HID report type 0x%x\n", packet->report_type);
             break;
     }
 }

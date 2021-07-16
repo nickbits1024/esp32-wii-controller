@@ -590,6 +590,17 @@ typedef struct
     uint8_t num_hci_command_packets;
     uint16_t op_code;
     uint8_t status;
+}
+__attribute__((packed)) HCI_RESET_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
     bd_addr_t addr;
 }
 __attribute__((packed)) HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET;
@@ -1083,6 +1094,7 @@ void write_uint16_be(uint8_t* p, uint16_t value);
 #define PARAMS_SIZE(a) (sizeof(a) - sizeof(HCI_COMMAND_PACKET))
 
 BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size);
+BT_PACKET_ENVELOPE* create_hci_reset_packet();
 BT_PACKET_ENVELOPE* create_hci_inquiry_packet(uint32_t lap, uint8_t duration, uint8_t num_responses);
 BT_PACKET_ENVELOPE* create_hci_remote_name_request_packet(const bd_addr_t addr, uint8_t psrm, bool clock_offset_valid, uint16_t clock_offset);
 BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, uint16_t packet_type, uint8_t psrm, bool clock_offset_valid, uint16_t clock_offset, uint8_t allow_role_switch);

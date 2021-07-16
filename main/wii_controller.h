@@ -59,6 +59,7 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 #define WII_BUTTON_TWO          0x0001
 
 #define WII_LED_REPORT                          0x11
+#define WII_DATA_REPORTING_MODE_REPORT          0x12
 #define WII_READ_MEMORY_AND_REGISTERS_REPORT    0x17
 
 #define WII_REMOTE_LED_1        0x10
@@ -106,5 +107,16 @@ typedef struct
     uint8_t led_flags;
 }
 __attribute__((packed)) WII_LED_PACKET;
+
+typedef struct
+{
+    uint8_t report_type;
+    uint8_t report_id;
+    uint8_t unknown_flags : 2;
+    uint8_t continus_reporting_flag : 1;
+    uint8_t unknown_flags_2 : 5;
+    uint8_t data_report_id;
+}
+__attribute__((packed)) WII_DATA_REPORTING_MODE_PACKET;
 
 extern WII_CONTROLLER wii_controller;

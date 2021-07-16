@@ -552,15 +552,25 @@ void start_wii_remote_pairing(const bd_addr_t addr)
 void wii_remote_connected()
 {
     send_led_report(WII_REMOTE_LED_4);
-    //post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, SDP_PSM, SDP_LOCAL_CID));
+    post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, SDP_PSM, SDP_LOCAL_CID));
 
-    post_hid_report_packet(wii_controller.con_handle, wii_controller.data_cid, (uint8_t*)"\xa2\x17\x00\x00\x17\x70\x00\x01", 8);
+    //post_hid_report_packet((uint8_t*)"\xa2\x17\x00\x00\x17\x70\x00\x01", 8);
+    //post_hid_report_packet((uint8_t*)"\xa2\x12\x06\x30", 4);
+    //post_hid_report_packet((uint8_t*)"\xa2\x1a\x02", 3);
+    //post_hid_report_packet((uint8_t*)"\xa2\x11\x12", 3);
+    //post_hid_report_packet((uint8_t*)"\xa2\x17\x00\x00\x00\x2a\x00\x38", 8);
+    //post_hid_report_packet((uint8_t*)"\xa2\x17\x00\x00\x00\x62\x00\x38", 8);
+    //post_hid_report_packet((uint8_t*)"\xa2\x17\x00\x00\x00\x00\x00\x2a", 8);
+    //post_hid_report_packet((uint8_t*)"\xa2\x15\x00", 3);
+    //post_hid_report_packet((uint8_t*)"\xa2\x13\x06", 3);
+    //post_hid_report_packet((uint8_t*)"\xa2\x1a\x06", 3);
+    post_hid_report_packet((uint8_t*)"\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x14\xbc\xc4\x00\x00\x00\x07\x00\x00\x00\x02\x81", 23);
 }
 
 void wii_remote_sdp_query()
 {
-    //post_sdp_packet((uint8_t*)"\x02\x00\x00\x00\x08\x35\x03\x19\x11\x24\x00\x15\x00", 13);
-    //post_sdp_packet((uint8_t*)"\x04\x00\x01\x00\x0e\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x00", 19);
+    //post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)"\x02\x00\x00\x00\x08\x35\x03\x19\x11\x24\x00\x15\x00", 13);
+    //post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)"\x04\x00\x01\x00\x0e\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x00", 19);
     //post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)"\x04\x00\x02\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x00\x76", 21);
     //post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)"\x04\x00\x03\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x00\xec", 21);
     //post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)"\x04\x00\x04\x00\x10\x00\x01\x00\x00\x00\xf0\x35\x05\x0a\x00\x00\xff\xff\x02\x01\x62", 21);

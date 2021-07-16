@@ -44,12 +44,19 @@ void wii_controller_init()
     err = xTaskCreatePinnedToCore(send_queue_task, "send_queue", 8000, NULL, 1, NULL, 0) == pdPASS ? ESP_OK : ESP_FAIL;
     ESP_ERROR_CHECK(err);
 
+    post_bt_packet(create_hci_reset_packet());
     post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_BD_ADDR, 0));
     //post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_LOCAL_NAME, 0));
     //post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_SIMPLE_PAIRING_MODE, 0));    
 }
 
 //void handle_XXX(uint8_t* packet, uint16_t size)
+
+void handle_reset_complete(HCI_RESET_COMPLETE_PACKET* packet)
+{
+    printf("reset complete status %x\n", packet->status);
+}
+
 void handle_read_bd_addr_complete(HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET* packet)
 {
     memcpy(device_addr, packet->addr, BDA_SIZE);
@@ -121,6 +128,9 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
     uint16_t op_code = read_uint16(packet + 4);
     switch (op_code)
     {
+        case HCI_OPCODE_RESET:
+            handle_reset_complete((HCI_RESET_COMPLETE_PACKET*)packet);
+            break;
         case HCI_OPCODE_READ_BD_ADDR:
             handle_read_bd_addr_complete((HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET*)packet);
             break;
@@ -316,15 +326,16 @@ void open_data_channel()
     post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, WII_DATA_PSM, WII_DATA_LOCAL_CID));
 }
 
-void post_hid_report_packet(uint8_t* hid_report, uint16_t report_size)
+void post_hid_report_packet(uint8_t* report, uint16_t report_size)
 {
     printf("send hid report\"");
     for (int i = 0; i < report_size; i++)
     {
-        printf("\\x%02x", hid_report[i]);
+        printf("\\x%02x", report[i]);
     }
     printf("\", %u\n", report_size);
 
+    post_bt_packet(create_l2cap_packet(wii_controller.con_handle, AUTO_L2CAP_SIZE, wii_controller.data_cid, report, report_size));
 }
 
 int sdp_packet_index = -1;
