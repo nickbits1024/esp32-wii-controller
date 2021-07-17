@@ -14,6 +14,7 @@
 #include "bt.h"
 #include "wii_bt.h"
 
+void dump_packet(const char* prefix, uint8_t* packet, uint16_t size);
 void wii_controller_init();
 int wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size);
@@ -28,7 +29,7 @@ void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint
 void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
-//#define WII_REMOTE_TEST
+#define WII_REMOTE_TEST
 
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
 #define SDP_PSM                     0x01
@@ -38,6 +39,10 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 #define WII_CONTROL_LOCAL_CID       0x44
 #define WII_DATA_LOCAL_CID          0x45
 #define LINK_KEY_BLOB_NAME          "link_key"
+
+#define WII_SDP_MTU                 256
+#define WII_SDP_FLUSH_TIMEOUT       0xffff
+#define WII_REMOTE_MTU              185
 
 #define WII_MTU                     640
 #define WII_FLUSH_TIMEOUT           0xffff

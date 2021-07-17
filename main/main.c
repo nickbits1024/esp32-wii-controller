@@ -1,6 +1,10 @@
 #include "wii_controller.h"
 
-//#define SPOOF_WIIMOTE
+// #ifdef WII_REMOTE_TEST
+// #define SPOOF_WIIMOTE
+// #else
+// #define SPOOF_WIIMOTE
+// #endif
 
 void app_main(void)
 {
@@ -43,7 +47,7 @@ void app_main(void)
     ret = esp_bt_controller_init(&bt_cfg);
     ESP_ERROR_CHECK(ret);
 
-    ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
+    ret = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT);
     ESP_ERROR_CHECK(ret);
 
     wii_controller_init();

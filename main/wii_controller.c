@@ -12,11 +12,13 @@ void send_queue_task(void* p)
 
         if (xQueueReceive(send_queue_handle, &env, portMAX_DELAY))
         {
-            printf("send size %3u data ", env->size);
-            for (int i = 0; i < env->size; i++)
-            {
-                printf("%02x ", env->packet[i]);
-            }
+            // printf("send size %3u data ", env->size);
+            // for (int i = 0; i < env->size; i++)
+            // {
+            //     printf("%02x ", env->packet[i]);
+            // }
+            // printf("\n");
+            dump_packet("send", env->packet, env->size);
             printf("\n");
 
             while (!esp_vhci_host_check_send_available());
@@ -123,6 +125,11 @@ void handle_write_secure_connections_host_support(HCI_WRITE_SECURE_CONNECTION_HO
     printf("write_secure_connections_host_support complete status 0x%x\n", packet->status);
 }
 
+void handle_write_pin_type(HCI_WRITE_PIN_TYPE_COMPLETE_PACKET* packet)
+{
+    printf("handle_write_pin_type complete status 0x%x\n", packet->status);
+}
+
 void handle_command_complete(uint8_t* packet, uint16_t size)
 {
     uint16_t op_code = read_uint16(packet + 4);
@@ -175,6 +182,9 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
             break;
         case HCI_OPCODE_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT:
             handle_write_secure_connections_host_support((HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET*)packet);
+            break;
+        case HCI_OPCODE_WRITE_PIN_TYPE:
+            handle_write_pin_type((HCI_WRITE_PIN_TYPE_COMPLETE_PACKET*)packet);
             break;
         default:
             printf("unhandled command complete 0x%04x\n", op_code);
@@ -247,14 +257,39 @@ void handle_encryption_change(HCI_ENCRYPTION_CHANGE_EVENT_PACKET* packet)
     printf("encryption changed status %x  handle 0x%x encryption_enabled %u\n", packet->status, packet->con_handle, packet->encryption_enabled);
 }
 
-void dump_packet(const char* prefix, uint8_t* packet, uint16_t size)
+void handle_mode_change(HCI_MODE_CHANGE_EVENT_PACKET* packet)
 {
-    printf("%s size %3u data ", prefix, size);
+    printf("mode changed handle %x status %x current_mode %x interval %x\n", packet->con_handle, packet->status, packet->current_mode, packet->interval);
+}
+
+#define DUMP_WIDTH 16
+void dump_packet(const char* prefix, uint8_t* packet, uint16_t size)
+{    
     for (int i = 0; i < size; i++)
     {
-        printf("%02x ", packet[i]);
+        if (i % DUMP_WIDTH == 0 && i == 0)
+        {
+            printf("%s %3u ", prefix, size);
+        }
+        else
+        {
+            printf("         ");
+        }
+        int j = 0;
+        for (; j < DUMP_WIDTH && i < size; i++, j++)
+        {
+            printf("%02x ", packet[i]);
+        }
+        for (; j < DUMP_WIDTH; j++)
+        {
+            printf("   ");
+        }
+        if (i + 1 < size)
+        {
+            printf("\n");
+        }
     }
-    printf("\n");
+    printf("  ");
 }
 
 int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
@@ -297,6 +332,9 @@ int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
                 case HCI_EVENT_ENCRYPTION_CHANGE:
                     handle_encryption_change((HCI_ENCRYPTION_CHANGE_EVENT_PACKET*)packet);
                     break;
+                case HCI_EVENT_MODE_CHANGE:
+                    handle_mode_change((HCI_MODE_CHANGE_EVENT_PACKET*)packet);
+                    break;
                 default:
                     if (!handled)
                     {
@@ -305,6 +343,20 @@ int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
                     break;
             }
             break;
+        case HCI_ACL_DATA_PACKET:
+        {
+            HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
+            if (acl_packet->broadcast_flag != 0)
+            {
+                printf("~~~~~~~~~~~~~~~~~~~~~~broadcast_flag %0x~~~~~~~~~~~~~~~~\n", acl_packet->broadcast_flag);
+            }
+            if (acl_packet->packet_boundary_flag != L2CAP_PB_FIRST_FLUSH)
+            {
+                printf("~~~~~~~~~~~~~~~~~~~~~~packet_boundary_flag %0x~~~~~~~~~~~~~~~~\n", acl_packet->packet_boundary_flag);
+            }
+
+            break;
+        }
         default:
             if (!handled)
             {
@@ -328,7 +380,7 @@ void open_data_channel()
 
 void post_hid_report_packet(uint8_t* report, uint16_t report_size)
 {
-    printf("send hid report\"");
+    printf("send hid report \"");
     for (int i = 0; i < report_size; i++)
     {
         printf("\\x%02x", report[i]);

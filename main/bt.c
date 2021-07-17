@@ -175,6 +175,17 @@ BT_PACKET_ENVELOPE* create_hci_link_key_request_negative_packet(const bd_addr_t 
     return env;
 }
 
+BT_PACKET_ENVELOPE* create_hci_write_pin_type_packet(uint8_t pin_type)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_PIN_TYPE, PARAMS_SIZE(HCI_WRITE_PIN_TYPE_PACKET));
+    HCI_WRITE_PIN_TYPE_PACKET* packet = (HCI_WRITE_PIN_TYPE_PACKET*)env->packet;
+
+    packet->pin_type  = pin_type;
+
+    return env;
+}
+
+
 BT_PACKET_ENVELOPE* create_hci_pin_code_request_reply_packet(const bd_addr_t addr, const uint8_t* pin_code, uint8_t pin_code_size)
 {
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_PIN_CODE_REQUEST_REPLY, PARAMS_SIZE(HCI_PIN_CODE_REQUEST_REPLY_PACKET));

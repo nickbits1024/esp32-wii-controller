@@ -6,6 +6,9 @@
 #define HCI_SCO_DATA_PACKET     0x03
 #define HCI_EVENT_PACKET        0x04
 
+#define HCI_VARIABLE_PIN_TYPE   0x00
+#define HCI_FIXED_PIN_TYPE      0x01
+
 #define OGF_LINK_CONTROL                0x01
 #define OGF_LINK_POLICY                 0x02
 #define OGF_CONTROLLER_BASEBAND         0x03
@@ -17,6 +20,8 @@
 
 #define HID_INPUT_REPORT                0xa1
 #define HID_OUTPUT_REPORT               0xa2
+
+
 
 #define HCI_OPCODE(ogf, ocf) ((ocf) | ((ogf) << 10))
 
@@ -342,8 +347,8 @@
 #define L2CAP_DISCONNECTION_REQUEST     0x06
 #define L2CAP_DISCONNECTION_RESPONSE    0x07
 
-#define L2CAP_CONNECTION_SUCCESS        0x00
-#define L2CAP_CONNECTION_PENDING        0x01
+#define L2CAP_CONNECTION_RESULT_SUCCESS     0x00
+#define L2CAP_CONNECTION_RESULT_PENDING     0x01
 
 #define L2CAP_PB_FIRST_FLUSH            ((uint16_t)2)
 #define L2CAP_PB_FRAGMENT               ((uint16_t)1)
@@ -392,6 +397,15 @@ typedef struct
     uint8_t num_responses;
 }
 __attribute__((packed)) HCI_INQUIRY_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    uint8_t pin_type;
+}
+__attribute__((packed)) HCI_WRITE_PIN_TYPE_PACKET;
 
 typedef struct
 {
@@ -601,6 +615,17 @@ typedef struct
     uint8_t num_hci_command_packets;
     uint16_t op_code;
     uint8_t status;
+}
+__attribute__((packed)) HCI_WRITE_PIN_TYPE_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
     bd_addr_t addr;
 }
 __attribute__((packed)) HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET;
@@ -717,7 +742,6 @@ typedef struct
 }
 __attribute__((packed)) HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET;
 
-
 typedef struct
 {
     uint8_t type;
@@ -733,6 +757,18 @@ typedef struct
     uint32_t delay_variation;
 }
 __attribute__((packed)) HCI_QOS_SETUP_COMPLETE_EVENT_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t status;
+    uint16_t con_handle;
+    uint8_t current_mode;
+    uint16_t interval;
+}
+__attribute__((packed)) HCI_MODE_CHANGE_EVENT_PACKET;
 
 typedef struct
 {
@@ -1101,6 +1137,7 @@ BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, ui
 BT_PACKET_ENVELOPE* create_hci_authentication_requested_packet(uint16_t con_handle);
 BT_PACKET_ENVELOPE* create_hci_link_key_request_reply_packet(const bd_addr_t addr, const uint8_t* link_key);
 BT_PACKET_ENVELOPE* create_hci_link_key_request_negative_packet(const bd_addr_t addr);
+BT_PACKET_ENVELOPE* create_hci_write_pin_type_packet(uint8_t pin_type);
 BT_PACKET_ENVELOPE* create_hci_pin_code_request_reply_packet(const bd_addr_t addr, const uint8_t* pin_code, uint8_t pin_code_size);
 BT_PACKET_ENVELOPE* create_hci_pin_code_request_negative_reply_packet(const bd_addr_t addr);
 BT_PACKET_ENVELOPE* create_hci_write_scan_eanble_packet(uint8_t scan_enable);
