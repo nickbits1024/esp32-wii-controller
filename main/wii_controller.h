@@ -14,7 +14,7 @@
 #include "bt.h"
 #include "wii_bt.h"
 
-void dump_packet(const char* prefix, uint8_t* packet, uint16_t size);
+void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size);
 void wii_controller_init();
 int queue_packet_handler(uint8_t* packet, uint16_t size);
 void wii_remote_packet_handler(uint8_t* packet, uint16_t size);
@@ -36,9 +36,9 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 #define SDP_PSM                     0x01
 #define WII_CONTROL_PSM             0x11
 #define WII_DATA_PSM                0x13
-#define SDP_LOCAL_CID               0x43
-#define WII_CONTROL_LOCAL_CID       0x44
-#define WII_DATA_LOCAL_CID          0x45
+#define SDP_LOCAL_CID               0x101
+#define WII_CONTROL_LOCAL_CID       0x111
+#define WII_DATA_LOCAL_CID          0x113
 #define LINK_KEY_BLOB_NAME          "link_key"
 
 #define WII_SDP_MTU                 256

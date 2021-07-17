@@ -106,7 +106,7 @@ void handle_wii_remote_remote_name_request_complete(uint8_t* packet, uint16_t si
 
 void handle_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* packet)
 {
-    printf("connection complete addr %s status 0x%02x handle 0x%04x, link_type %u encrypted %u\n", bda_to_string(packet->addr), packet->status, packet->con_handle, packet->link_type, packet->encryption_enabled);
+    printf("connection complete addr %s status 0x%02x con_handle 0x%x, link_type %u encrypted %u\n", bda_to_string(packet->addr), packet->status, packet->con_handle, packet->link_type, packet->encryption_enabled);
     if (packet->status == 0)
     {
         if (wii_controller.state == STATE_WII_REMOTE_PAIRING_PENDING)
@@ -173,7 +173,7 @@ void handle_wii_remote_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACKET* p
 
 void handle_wii_remote_authentication_complete(HCI_AUTHENTICATION_COMPLETE_EVENT_PACKET* packet)
 {
-    printf("auth complete handle 0x%x status 0x%x\n", packet->con_handle, packet->status);
+    printf("auth complete con_handle 0x%x status 0x%x\n", packet->con_handle, packet->status);
 
     if (wii_controller.state == STATE_WII_REMOTE_PAIRING_STARTED)
     {
@@ -188,52 +188,28 @@ void handle_wii_remote_authentication_complete(HCI_AUTHENTICATION_COMPLETE_EVENT
     }
 }
 
-void handle_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_PACKET* response_packet)
-{
-    printf("l2cap conn response handle 0x%04x remote_cid 0x%x local_cid 0x%x result 0x%x status 0x%x\n",
-        response_packet->con_handle, response_packet->remote_cid, response_packet->local_cid, response_packet->result, response_packet->status);
-
-    if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_RESULT_SUCCESS)
-    {
-        wii_controller.con_handle = response_packet->con_handle;
-        switch (response_packet->local_cid)
-        {
-            case SDP_LOCAL_CID:
-                wii_controller.sdp_cid = response_packet->remote_cid;
-                printf("set wii_controller.con_handle %04x wii_controller.sdp_cid=0x%x\n", wii_controller.con_handle, wii_controller.sdp_cid);
-                post_l2ap_config_mtu_flush_timeout_request(response_packet->con_handle, response_packet->remote_cid, WII_SDP_MTU, WII_SDP_FLUSH_TIMEOUT);
-                break;
-            case WII_CONTROL_LOCAL_CID:
-                wii_controller.control_cid = response_packet->remote_cid;
-                printf("set wii_controller.con_handle %04x wii_controller.control_cid=0x%x\n", wii_controller.con_handle, wii_controller.control_cid);
-                post_l2ap_config_mtu_flush_timeout_request(response_packet->con_handle, response_packet->remote_cid, WII_MTU, WII_SDP_FLUSH_TIMEOUT);
-                break;
-            case WII_DATA_LOCAL_CID:
-                wii_controller.data_cid = response_packet->remote_cid;
-                printf("set wii_controller.con_handle %04x wii_controller.data_cid=0x%x\n", wii_controller.con_handle, wii_controller.data_cid);
-                post_l2ap_config_mtu_flush_timeout_request(response_packet->con_handle, response_packet->remote_cid, WII_MTU, WII_SDP_FLUSH_TIMEOUT);
-                break;
-        }
-    }
-}
-
 void handle_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PACKET* packet)
 {
-    printf("l2cap connection request handle 0x%x psm 0x%x local_cid %04x\n", packet->con_handle, packet->psm, packet->local_cid);
+    //printf("l2cap connection request con_handle 0x%x psm 0x%x source_cid 0x%x\n", packet->con_handle, packet->psm, packet->source_cid);
 
     wii_controller.con_handle = packet->con_handle;
     uint16_t cid;
     switch (packet->psm)
     {
+        case SDP_PSM:
+            wii_controller.sdp_cid = packet->source_cid;
+            cid = SDP_LOCAL_CID;
+            printf("set wii_controller.con_handle 0x%x wii_controller.sdp_cid=0x%x\n", wii_controller.con_handle, wii_controller.sdp_cid);
+            break;
         case WII_CONTROL_PSM:
-            wii_controller.control_cid = packet->local_cid;
+            wii_controller.control_cid = packet->source_cid;
             cid = WII_CONTROL_LOCAL_CID;
-            printf("set wii_controller.con_handle %04x wii_controller.control_cid=0x%x\n", wii_controller.con_handle, wii_controller.control_cid);
+            printf("set wii_controller.con_handle 0x%x wii_controller.control_cid=0x%x\n", wii_controller.con_handle, wii_controller.control_cid);
             break;
         case WII_DATA_PSM:
-            wii_controller.data_cid = packet->local_cid;
+            wii_controller.data_cid = packet->source_cid;
             cid = WII_DATA_LOCAL_CID;
-            printf("set wii_controller.con_handle %04x wii_controller.data_cid=0x%x\n", wii_controller.con_handle, wii_controller.data_cid);
+            printf("set wii_controller.con_handle 0x%x wii_controller.data_cid=0x%x\n", wii_controller.con_handle, wii_controller.data_cid);
             break;
         default:
             cid = 0;
@@ -246,8 +222,37 @@ void handle_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PACKET*
         return;
     }
 
-    post_bt_packet(create_l2cap_connection_response_packet(packet->con_handle, packet->identifier, cid, packet->local_cid, 0, ERROR_CODE_SUCCESS));
-    //post_l2ap_config_mtu_request(packet->con_handle, packet->local_cid, WII_MTU);
+    post_bt_packet(create_l2cap_connection_response_packet(packet->con_handle, packet->identifier, cid, packet->source_cid, 0, ERROR_CODE_SUCCESS));
+    //post_l2ap_config_mtu_request(packet->con_handle, packet->source_cid, WII_MTU);
+}
+
+void handle_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_PACKET* response_packet)
+{
+    //printf("l2cap conn response con_handle 0x%x id 0x%x dest_cid 0x%x source_cid 0x%x result 0x%x status 0x%x\n",
+    //    response_packet->con_handle, packet->identifier, response_packet->dest_cid, response_packet->source_cid, response_packet->result, response_packet->status);
+
+    if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_RESULT_SUCCESS)
+    {
+        wii_controller.con_handle = response_packet->con_handle;
+        switch (response_packet->source_cid)
+        {
+            case SDP_LOCAL_CID:
+                wii_controller.sdp_cid = response_packet->dest_cid;
+                printf("set wii_controller.con_handle 0x%x wii_controller.sdp_cid=0x%x\n", wii_controller.con_handle, wii_controller.sdp_cid);
+                post_l2ap_config_mtu_flush_timeout_request(response_packet->con_handle, response_packet->dest_cid, WII_SDP_MTU, WII_SDP_FLUSH_TIMEOUT);
+                break;
+            case WII_CONTROL_LOCAL_CID:
+                wii_controller.control_cid = response_packet->dest_cid;
+                printf("set wii_controller.con_handle 0x%x wii_controller.control_cid=0x%x\n", wii_controller.con_handle, wii_controller.control_cid);
+                post_l2ap_config_mtu_flush_timeout_request(response_packet->con_handle, response_packet->dest_cid, WII_MTU, WII_SDP_FLUSH_TIMEOUT);
+                break;
+            case WII_DATA_LOCAL_CID:
+                wii_controller.data_cid = response_packet->dest_cid;
+                printf("set wii_controller.con_handle 0x%x wii_controller.data_cid=0x%x\n", wii_controller.con_handle, wii_controller.data_cid);
+                post_l2ap_config_mtu_flush_timeout_request(response_packet->con_handle, response_packet->dest_cid, WII_MTU, WII_SDP_FLUSH_TIMEOUT);
+                break;
+        }
+    }
 }
 
 void send_led_report(uint8_t led_flags)
@@ -262,14 +267,14 @@ void send_led_report(uint8_t led_flags)
 
 void handle_wii_remote_l2cap_command_reject(L2CAP_COMMAND_REJECT_PACKET* packet)
 {
-    printf("l2cap cmd rejected handle 0x%04x reason 0x%02x\n", packet->con_handle, packet->reason);
+    //printf("l2cap cmd rejected con_handle 0x%x id 0x%x reason 0x%02x\n", packet->con_handle, packet->identifier, ->reason);
 }
 
 void handle_wii_remote_l2cap_disconnection_request(L2CAP_DISCONNECTION_REQUEST_PACKET* packet)
 {
-    printf("l2cap disconnect request 0x%04x remote_cid 0x%0x local_cid 0x%x\n", packet->con_handle, packet->remote_cid, packet->local_cid);
+    //printf("l2cap disconnect request con_handle 0x%x id 0x%x dest_cid 0x%x source_cid 0x%x\n", packet->con_handle, packet->identifier, packet->dest_cid, packet->source_cid);
 
-    post_bt_packet(create_l2cap_disconnection_response_packet(packet->con_handle, packet->identifier, packet->remote_cid, packet->local_cid));
+    post_bt_packet(create_l2cap_disconnection_response_packet(packet->con_handle, packet->identifier, packet->dest_cid, packet->source_cid));
     //post_bt_packet(create_hci_disconnect_packet(packet->con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION));
 }
 
@@ -278,7 +283,7 @@ void handle_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request
     uint16_t options_size = request_packet->payload_size - 4;
 
     uint16_t cid;
-    switch (request_packet->remote_cid)
+    switch (request_packet->dest_cid)
     {
         case SDP_LOCAL_CID:
             cid = wii_controller.sdp_cid;
@@ -296,13 +301,13 @@ void handle_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request
 
     if (cid == 0)
     {
-        printf("l2cap config request no matching cid for 0x%x\n", request_packet->remote_cid);
+        printf("l2cap config request no matching cid for 0x%x\n", request_packet->dest_cid);
         return;
     }
 
-    printf("l2cap config request 0x%04x remote_cid 0x%x local_cid 0x%x options_size %u options", request_packet->con_handle, request_packet->remote_cid, cid, options_size);
-    dump_l2cap_config_options(request_packet->options, options_size);
-    printf("\n");
+    // printf("l2cap config request con_handle 0x%x dest_cid 0x%x source_cid 0x%x options_size %u options", request_packet->con_handle, request_packet->dest_cid, cid, options_size);
+    // dump_l2cap_config_options(request_packet->options, options_size);
+    // printf("\n");
 
     BT_PACKET_ENVELOPE* env = create_l2cap_config_response_packet(request_packet->con_handle, request_packet->identifier, cid, request_packet->flags, 0);
 
@@ -312,7 +317,7 @@ void handle_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request
 
     post_bt_packet(env);
 
-    switch (request_packet->remote_cid)
+    switch (request_packet->dest_cid)
     {
         case SDP_LOCAL_CID:
             wii_remote_sdp_query();
@@ -322,11 +327,11 @@ void handle_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request
 
 void handle_wii_remote_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packet)
 {
-    uint16_t options_size = packet->payload_size - 6;
+    // uint16_t options_size = packet->payload_size - 6;
 
-    printf("l2cap config response handle 0x%04x local_cid 0x%x result 0x%x options_size %u options", packet->con_handle, packet->local_cid, packet->result, options_size);
-    dump_l2cap_config_options(packet->options, options_size);
-    printf("\n");
+    // printf("l2cap config response con_handle 0x%x source_cid 0x%x result 0x%x options_size %u options", packet->con_handle, packet->source_cid, packet->result, options_size);
+    // dump_l2cap_config_options(packet->options, options_size);
+    // printf("\n");
 }
 
 void handle_wii_remote_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
@@ -438,7 +443,7 @@ void handle_wii_remote_remote_data(HID_REPORT_PACKET* packet, uint16_t size)
             break;
         }
         default:
-            printf("unhandled hid report %x\n", packet->report_type);
+            printf("unhandled hid report 0x%x\n", packet->report_type);
             break;
     }
 }
@@ -447,11 +452,12 @@ void wii_remote_packet_handler(uint8_t* packet, uint16_t size)
 {
     //dump_packet("recv", packet, size);
 
-    bool handled = true;
+    HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
+    HCI_EVENT_PACKET* event_packet = (HCI_EVENT_PACKET*)packet;
 
-    switch (packet[0])
+    switch (acl_packet->type)
     {
-        case HCI_EVENT_PACKET:
+        case HCI_EVENT_PACKET_TYPE:
             switch (packet[1])
             {
                 case HCI_EVENT_INQUIRY_RESULT:
@@ -479,11 +485,10 @@ void wii_remote_packet_handler(uint8_t* packet, uint16_t size)
                     handle_wii_remote_connection_request((HCI_CONNECTION_REQUEST_EVENT_PACKET*)packet);
                     break;
                 default:
-                    handled = false;
                     break;
             }
             break;
-        case HCI_ACL_DATA_PACKET:
+        case HCI_ACL_DATA_PACKET_TYPE:
         {
             HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
             L2CAP_PACKET* l2cap_packet = (L2CAP_PACKET*)packet;
@@ -506,7 +511,7 @@ void wii_remote_packet_handler(uint8_t* packet, uint16_t size)
                         handle_wii_remote_sdp_channel((L2CAP_PACKET*)packet);
                         break;
                     default:
-                        printf("unhandled l2cap channel %04x con_handle %04x\n", l2cap_packet->channel, l2cap_packet->con_handle);
+                        printf("unhandled l2cap channel 0x%x con_handle 0x%x\n", l2cap_packet->channel, l2cap_packet->con_handle);
                         break;
                 }
             }
@@ -522,18 +527,15 @@ void wii_remote_packet_handler(uint8_t* packet, uint16_t size)
                         break;
                 }
             }
-            else
-            {
-                printf("bad packet_boundary_flag %x\n", acl_packet->packet_boundary_flag);
-            }
+            // else
+            // {
+            //     printf("bad packet_boundary_flag 0x%x\n", acl_packet->packet_boundary_flag);
+            // }
             break;
         }
         default:
-            handled = false;
             break;
     }
-
-    wii_bt_packet_handler(packet, size, handled);
 }
 
 void wii_remote_test()

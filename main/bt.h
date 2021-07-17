@@ -1,10 +1,10 @@
 #ifndef BT_H
 #define BT_H
 
-#define HCI_COMMAND_DATA_PACKET 0x01
-#define HCI_ACL_DATA_PACKET     0x02
-#define HCI_SCO_DATA_PACKET     0x03
-#define HCI_EVENT_PACKET        0x04
+#define HCI_COMMAND_PACKET_TYPE     0x01
+#define HCI_ACL_PACKET_TYPE         0x02
+#define HCI_SCO_PACKET_TYPE         0x03
+#define HCI_EVENT_PACKET_TYPE       0x04
 
 #define HCI_VARIABLE_PIN_TYPE   0x00
 #define HCI_FIXED_PIN_TYPE      0x01
@@ -120,7 +120,7 @@
 #define HCI_OPCODE_READ_LOCAL_SUPPORTED_FEATURES HCI_OPCODE(OGF_INFORMATIONAL_PARAMETERS, 0x03)
 #define HCI_OPCODE_READ_BUFFER_SIZE HCI_OPCODE(OGF_INFORMATIONAL_PARAMETERS, 0x05)
 #define HCI_OPCODE_READ_BD_ADDR HCI_OPCODE(OGF_INFORMATIONAL_PARAMETERS, 0x09)
-#define HCI_OPCODE_READ_RSSI HCI_OPCODE(OGF_STATUS_PARAMETERS 0x05)
+#define HCI_OPCODE_READ_RSSI HCI_OPCODE(OGF_STATUS_PARAMETERS, 0x05)
 #define HCI_OPCODE_READ_ENCRYPTION_KEY_SIZE HCI_OPCODE(OGF_STATUS_PARAMETERS, 0x08)
 
 #define HCI_EVENT_INQUIRY_COMPLETE                         0x01
@@ -619,6 +619,18 @@ typedef struct
     uint8_t num_hci_command_packets;
     uint16_t op_code;
     uint8_t status;
+    uint8_t local_name[HCI_MAX_LOCAL_NAME_SIZE];
+}
+__attribute__((packed)) HCI_READ_LOCAL_NAME_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
 }
 __attribute__((packed)) HCI_WRITE_PIN_TYPE_COMPLETE_PACKET;
 
@@ -745,6 +757,14 @@ typedef struct
     uint8_t simple_pairing_mode;
 }
 __attribute__((packed)) HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+}
+__attribute__((packed)) HCI_EVENT_PACKET;
 
 typedef struct
 {
@@ -957,7 +977,7 @@ typedef struct
     uint16_t payload_size;
 
     uint16_t psm;
-    uint16_t local_cid;
+    uint16_t source_cid;
 } 
 __attribute__((packed)) L2CAP_CONNECTION_REQUEST_PACKET;
 
@@ -975,8 +995,8 @@ typedef struct
     uint8_t identifier;
     uint16_t payload_size;
 
-    uint16_t remote_cid;
-    uint16_t local_cid;
+    uint16_t dest_cid;
+    uint16_t source_cid;
     uint16_t result;
     uint16_t status;
 }
@@ -997,7 +1017,7 @@ typedef struct
     uint8_t identifier;
     uint16_t payload_size;
 
-    uint16_t remote_cid;
+    uint16_t dest_cid;
     uint16_t flags;
 
     uint8_t options[];
@@ -1019,7 +1039,7 @@ typedef struct
     uint8_t identifier;
     uint16_t payload_size;
 
-    uint16_t local_cid;
+    uint16_t source_cid;
     uint16_t flags;
     
     uint16_t result;
@@ -1069,8 +1089,8 @@ typedef struct
     uint8_t identifier;
     uint16_t payload_size;
 
-    uint16_t remote_cid;
-    uint16_t local_cid;
+    uint16_t dest_cid;
+    uint16_t source_cid;
 }
 __attribute__((packed)) L2CAP_DISCONNECTION_REQUEST_PACKET;
 
@@ -1088,8 +1108,8 @@ typedef struct
     uint8_t identifier;
     uint16_t payload_size;
 
-    uint16_t remote_cid;
-    uint16_t local_cid;
+    uint16_t dest_cid;
+    uint16_t source_cid;
 }
 __attribute__((packed)) L2CAP_DISCONNECTION_RESPONSE_PACKET;
 
@@ -1159,11 +1179,11 @@ BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint16_t s
 
 BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, uint8_t* data, uint16_t data_size);
 BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t l2cap_size, uint16_t channel, uint8_t* data, uint16_t data_size);
-BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, uint16_t psm, uint16_t local_cid);
-BT_PACKET_ENVELOPE* create_l2cap_connection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t remote_cid, uint16_t local_cid, uint16_t result, uint16_t status);
-BT_PACKET_ENVELOPE* create_l2cap_config_request_packet(uint16_t con_handle, uint16_t remote_cid, uint16_t flags, uint16_t options_size);
-BT_PACKET_ENVELOPE* create_l2cap_config_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t local_cid, uint16_t flags, uint16_t options_size);
-BT_PACKET_ENVELOPE* create_l2cap_disconnection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t remote_cid, uint16_t local_cid);
+BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, uint16_t psm, uint16_t source_cid);
+BT_PACKET_ENVELOPE* create_l2cap_connection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t dest_cid, uint16_t source_cid, uint16_t result, uint16_t status);
+BT_PACKET_ENVELOPE* create_l2cap_config_request_packet(uint16_t con_handle, uint16_t dest_cid, uint16_t flags, uint16_t options_size);
+BT_PACKET_ENVELOPE* create_l2cap_config_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t source_cid, uint16_t flags, uint16_t options_size);
+BT_PACKET_ENVELOPE* create_l2cap_disconnection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t dest_cid, uint16_t source_cid);
 
 BT_PACKET_ENVELOPE* create_output_report_packet(uint16_t con_handle, uint16_t channel, uint8_t* report, uint16_t report_size);
 
