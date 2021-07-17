@@ -1,16 +1,17 @@
 #include "wii_controller.h"
 
 WII_CONTROLLER wii_controller;
-xQueueHandle send_queue_handle;
+xQueueHandle queue_handle;
 bd_addr_t device_addr;
+//portMUX_TYPE dump_mux = portMUX_INITIALIZER_UNLOCKED;
 
-void send_queue_task(void* p)
+void queue_io_task(void* p)
 {
     for (;;)
     {
         BT_PACKET_ENVELOPE* env;
 
-        if (xQueueReceive(send_queue_handle, &env, portMAX_DELAY))
+        if (xQueueReceive(queue_handle, &env, portMAX_DELAY))
         {
             // printf("send size %3u data ", env->size);
             // for (int i = 0; i < env->size; i++)
@@ -18,20 +19,50 @@ void send_queue_task(void* p)
             //     printf("%02x ", env->packet[i]);
             // }
             // printf("\n");
-            dump_packet("send", env->packet, env->size);
-            printf("\n");
+            switch (env->io_direction)
+            {
+            case OUTPUT_PACKET:
+                dump_packet("send", env->packet, env->size);
+                printf("\n");
 
-            while (!esp_vhci_host_check_send_available());
-            esp_vhci_host_send_packet(env->packet, env->size);
+                //vTaskDelay(200 / portTICK_PERIOD_MS);
+
+                while (!esp_vhci_host_check_send_available());
+                esp_vhci_host_send_packet(env->packet, env->size);
+                break;
+            case INPUT_PACKET:
+                dump_packet("recv", env->packet, env->size);
+#ifdef WII_REMOTE_TEST
+                wii_remote_packet_handler(env->packet, env->size);
+#else
+                fake_wii_remote_packet_handler(env->packet, env->size);
+#endif
+                break;
+            default:
+                abort();
+                break;
+            }
 
             free(env);
         }
     }
 }
 
-void post_bt_packet(BT_PACKET_ENVELOPE* packet)
+int queue_packet_handler(uint8_t* packet, uint16_t size)
 {
-    xQueueSend(send_queue_handle, &packet, portMAX_DELAY);
+    BT_PACKET_ENVELOPE* env = create_packet_envelope(size);
+    env->io_direction = INPUT_PACKET;
+    memcpy(env->packet, packet, size);
+
+    xQueueSend(queue_handle, &env, portMAX_DELAY);
+
+    return 0;
+}
+
+void post_bt_packet(BT_PACKET_ENVELOPE* env)
+{
+    env->io_direction = OUTPUT_PACKET;
+    xQueueSend(queue_handle, &env, portMAX_DELAY);
 }
 
 void wii_controller_init()
@@ -41,9 +72,9 @@ void wii_controller_init()
     err = nvs_open("default", NVS_READWRITE, &wii_controller.nvs_handle);
     ESP_ERROR_CHECK(err);
 
-    send_queue_handle = xQueueCreate(32, sizeof(BT_PACKET_ENVELOPE*));
+    queue_handle = xQueueCreate(32, sizeof(BT_PACKET_ENVELOPE*));
 
-    err = xTaskCreatePinnedToCore(send_queue_task, "send_queue", 8000, NULL, 1, NULL, 0) == pdPASS ? ESP_OK : ESP_FAIL;
+    err = xTaskCreatePinnedToCore(queue_io_task, "queue_io", 8000, NULL, 1, NULL, 0) == pdPASS ? ESP_OK : ESP_FAIL;
     ESP_ERROR_CHECK(err);
 
     post_bt_packet(create_hci_reset_packet());
@@ -262,9 +293,11 @@ void handle_mode_change(HCI_MODE_CHANGE_EVENT_PACKET* packet)
     printf("mode changed handle %x status %x current_mode %x interval %x\n", packet->con_handle, packet->status, packet->current_mode, packet->interval);
 }
 
+
 #define DUMP_WIDTH 16
 void dump_packet(const char* prefix, uint8_t* packet, uint16_t size)
 {    
+//    portENTER_CRITICAL(&dump_mux);
     for (int i = 0; i < size; i++)
     {
         if (i % DUMP_WIDTH == 0 && i == 0)
@@ -290,6 +323,7 @@ void dump_packet(const char* prefix, uint8_t* packet, uint16_t size)
         }
     }
     printf("  ");
+//    portEXIT_CRITICAL(&dump_mux);
 }
 
 int wii_bt_packet_handler(uint8_t* packet, uint16_t size, bool handled)
@@ -432,6 +466,13 @@ void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint
     mtu_option->type = L2CAP_CONFIG_MTU_OPTION_TYPE;
     mtu_option->size = sizeof(L2CAP_CONFIG_MTU_OPTION) - sizeof(L2CAP_CONFIG_OPTION);
     mtu_option->mtu = mtu;
+
+    printf("mtu packet size %u", env->size);
+    for (int i = 0; i < env->size; i++)
+    {
+        printf(" %02x", env->packet[i]);
+    }
+    printf("\n");
 
     post_bt_packet(env);
 }

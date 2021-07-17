@@ -16,8 +16,9 @@
 
 void dump_packet(const char* prefix, uint8_t* packet, uint16_t size);
 void wii_controller_init();
-int wii_remote_packet_handler(uint8_t* packet, uint16_t size);
-int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size);
+int queue_packet_handler(uint8_t* packet, uint16_t size);
+void wii_remote_packet_handler(uint8_t* packet, uint16_t size);
+void fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 void wii_remote_test();
 void emulate_wii_remote();
 void open_control_channel();
@@ -29,7 +30,7 @@ void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint
 void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
-#define WII_REMOTE_TEST
+//#define WII_REMOTE_TEST
 
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
 #define SDP_PSM                     0x01
@@ -125,3 +126,6 @@ typedef struct
 __attribute__((packed)) WII_DATA_REPORTING_MODE_PACKET;
 
 extern WII_CONTROLLER wii_controller;
+
+
+//extern portMUX_TYPE dump_mux;

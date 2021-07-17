@@ -443,9 +443,9 @@ void handle_wii_remote_remote_data(HID_REPORT_PACKET* packet, uint16_t size)
     }
 }
 
-int wii_remote_packet_handler(uint8_t* packet, uint16_t size)
+void wii_remote_packet_handler(uint8_t* packet, uint16_t size)
 {
-    dump_packet("recv", packet, size);
+    //dump_packet("recv", packet, size);
 
     bool handled = true;
 
@@ -534,8 +534,6 @@ int wii_remote_packet_handler(uint8_t* packet, uint16_t size)
     }
 
     wii_bt_packet_handler(packet, size, handled);
-
-    return 0;
 }
 
 void wii_remote_test()
@@ -574,7 +572,6 @@ void wii_remote_connected()
     //post_hid_report_packet((uint8_t*)"\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x59\x0d\x78\x81\x14\x2c\xbc\x81\x5a\x97\x28\x81", 23);
     //post_hid_report_packet((uint8_t*)"\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\x95\x48\x81", 23);
     //post_hid_report_packet((uint8_t*)"\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\x9c\x5c\x81", 23);
-    // test this
     post_hid_report_packet((uint8_t*)"\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\xaa\x84\x81", 23);
 }
 

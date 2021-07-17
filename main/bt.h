@@ -361,8 +361,12 @@ typedef uint8_t bd_addr_t[BDA_SIZE];
 
 extern bd_addr_t device_addr;
 
+#define INPUT_PACKET         1
+#define OUTPUT_PACKET        2
+
 typedef struct
 {
+    uint8_t io_direction;
     uint16_t size;
     uint8_t packet[];
 }
@@ -1129,6 +1133,7 @@ void write_uint16_be(uint8_t* p, uint16_t value);
 
 #define PARAMS_SIZE(a) (sizeof(a) - sizeof(HCI_COMMAND_PACKET))
 
+BT_PACKET_ENVELOPE* create_packet_envelope(uint16_t packet_size);
 BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size);
 BT_PACKET_ENVELOPE* create_hci_reset_packet();
 BT_PACKET_ENVELOPE* create_hci_inquiry_packet(uint32_t lap, uint8_t duration, uint8_t num_responses);

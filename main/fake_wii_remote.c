@@ -157,7 +157,7 @@ void handle_fake_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_
 
     if (wii_controller.state == STATE_WII_CONSOLE_POWER_OFF_CONNECTED)
     {
-        if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_RESULT_PENDING)
+        if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_RESULT_SUCCESS)
         {
             post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->remote_cid, WII_REMOTE_MTU);
         }
@@ -279,6 +279,7 @@ void handle_fake_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* re
                 if (mtu_option->mtu != WII_REMOTE_MTU)
                 {
                     post_l2ap_config_mtu_request(request_packet->con_handle, cid, WII_REMOTE_MTU);
+                    i = options_size; // exit loop
                 }
                 break;
             }
@@ -449,7 +450,7 @@ REQUEST_RESPONSE hid_request_responses[] =
     { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x59\x0d\x78\x81\x14\x2c\xbc\x81\x5a\x97\x28\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
     { "\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\x95\x48\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
     { "\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\x9c\x5c\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { NULL, 0, NULL, 0 },
+    { "\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\xaa\x84\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
@@ -544,9 +545,9 @@ void handle_fake_wii_remote_data_channel(HID_REPORT_PACKET* packet, uint16_t siz
 }
 
 
-int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
+void fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
 {
-    dump_packet("recv", packet, size);
+    //dump_packet("recv", packet, size);
 
     bool handled = true;
 
@@ -611,8 +612,6 @@ int fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
     }
 
     wii_bt_packet_handler(packet, size, handled);
-
-    return 0;
 }
 
 void send_power_off_disconnect(uint16_t con_handle)
@@ -629,7 +628,7 @@ void connect_and_power_off()
 {
     wii_controller.state = STATE_WII_CONSOLE_POWER_OFF_PENDING;
     //post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x334, 1, false, 0, 1));
-    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x08, 1, false, 0, 1));
+    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x08, 0, false, 0, 1));
 }
 
 void emulate_wii_remote()

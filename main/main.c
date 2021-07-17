@@ -52,27 +52,17 @@ void app_main(void)
 
     wii_controller_init();
 
-#ifdef WII_REMOTE_TEST
     static esp_vhci_host_callback_t vhci_host_cb =
     {
         .notify_host_send_available = NULL,
-        .notify_host_recv = wii_remote_packet_handler,
+        .notify_host_recv = queue_packet_handler,
     };
     ret = esp_vhci_host_register_callback(&vhci_host_cb);
     ESP_ERROR_CHECK(ret);
 
+#ifdef WII_REMOTE_TEST
     wii_remote_test();
 #else
-    static esp_vhci_host_callback_t vhci_host_cb =
-    {
-        .notify_host_send_available = NULL,
-        .notify_host_recv = fake_wii_remote_packet_handler,
-    };
-    ret = esp_vhci_host_register_callback(&vhci_host_cb);
-    ESP_ERROR_CHECK(ret);
-
     emulate_wii_remote();
 #endif
-
-
 }

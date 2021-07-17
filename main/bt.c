@@ -80,13 +80,21 @@ uint32_t uint24_bytes_to_uint32(const uint8_t* cod)
     return uint32;
 }
 
-BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size)
+BT_PACKET_ENVELOPE* create_packet_envelope(uint16_t packet_size)
 {
-    uint16_t packet_size = sizeof(HCI_COMMAND_PACKET) + params_size;
-    uint16_t size = sizeof(BT_PACKET_ENVELOPE) + packet_size;
+    // leave this alone!!!
+    size_t size = sizeof(BT_PACKET_ENVELOPE) + packet_size;
+
     BT_PACKET_ENVELOPE* env = (BT_PACKET_ENVELOPE*)malloc(size);
     memset(env, 0, size);
-    env->size = packet_size;
+    //env->io_direction = io_direction;
+    env->size = packet_size;      
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size)
+{
+    BT_PACKET_ENVELOPE* env = create_packet_envelope(sizeof(HCI_COMMAND_PACKET) + params_size);
 
     HCI_COMMAND_PACKET* packet = (HCI_COMMAND_PACKET*)env->packet;
 
@@ -332,10 +340,7 @@ BT_PACKET_ENVELOPE* create_hci_write_local_name(char* local_name)
 
 BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, uint8_t* data, uint16_t data_size)
 {
-    uint16_t size = sizeof(BT_PACKET_ENVELOPE) + sizeof(HCI_ACL_PACKET) + data_size;
-    BT_PACKET_ENVELOPE* env = (BT_PACKET_ENVELOPE*)malloc(size);
-    memset(env, 0, size);
-    env->size = sizeof(HCI_ACL_PACKET) + data_size;
+    BT_PACKET_ENVELOPE* env = create_packet_envelope(sizeof(HCI_ACL_PACKET) + data_size);
 
     HCI_ACL_PACKET* packet = (HCI_ACL_PACKET*)env->packet;
 
@@ -351,10 +356,7 @@ BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uin
 
 BT_PACKET_ENVELOPE* create_l2cap_base_packet(uint16_t packet_size, uint16_t con_handle, uint16_t channel)
 {
-    uint16_t size = sizeof(BT_PACKET_ENVELOPE) + packet_size;
-    BT_PACKET_ENVELOPE* env = (BT_PACKET_ENVELOPE*)malloc(size);
-    memset(env, 0, size);
-    env->size = packet_size;
+    BT_PACKET_ENVELOPE* env = create_packet_envelope(packet_size);
 
     L2CAP_PACKET* packet = (L2CAP_PACKET*)env->packet;
 
