@@ -1,10 +1,10 @@
 #include "wii_controller.h"
 
-// #ifdef WII_REMOTE_TEST
-// #define SPOOF_WIIMOTE
-// #else
-// #define SPOOF_WIIMOTE
-// #endif
+#ifdef WII_REMOTE_TEST
+#define SPOOF_WIIMOTE
+#else
+#define SPOOF_WIIMOTE
+#endif
 
 void app_main(void)
 {

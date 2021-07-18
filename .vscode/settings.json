@@ -30,7 +30,8 @@
         "string": "c",
         "endian.h": "c",
         "task.h": "c",
-        "*.ipp": "c"
+        "*.ipp": "c",
+        "semphr.h": "c"
     },
     "idf.flashType": "UART",
     "idf.portWin": "COM3"

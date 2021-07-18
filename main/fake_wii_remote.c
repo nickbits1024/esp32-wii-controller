@@ -37,8 +37,9 @@ void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PA
                 memcpy(wii_addr, packet->addr, BDA_SIZE);
 
                 wii_controller.state = STATE_WII_CONSOLE_PAIRING_STARTED;
-                printf("pairing started...\n");
-                post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
+                //unnecessary
+                //printf("pairing started...\n");
+                //post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
                 break;
             case STATE_WII_CONSOLE_POWER_OFF_PENDING:
                 //send_power_off_disconnect(packet->con_handle);
@@ -175,7 +176,7 @@ void handle_fake_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PA
         case WII_DATA_PSM:
             wii_controller.data_cid = packet->source_cid;
             response_dest_cid = WII_DATA_LOCAL_CID;
-            result = L2CAP_CONNECTION_RESULT_PENDING;
+            //result = L2CAP_CONNECTION_RESULT_PENDING;
             printf("set wii_controller.con_handle 0x%x wii_controller.data_cid=0x%x\n", wii_controller.con_handle, wii_controller.data_cid);
             break;
         default:
@@ -292,7 +293,7 @@ void handle_fake_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* re
 
 void handle_fake_wii_remote_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packet)
 {
-    //uint16_t options_size = packet->payload_size - 6;
+    uint16_t options_size = packet->payload_size - 6;
 
     // printf("l2cap config response con_handle 0x%x id 0x%x source_cid 0x%x result 0x%x options_size %u options", packet->con_handle, packet->identifier, packet->source_cid, packet->result, options_size);
     // dump_l2cap_config_options(packet->options, options_size);
@@ -304,6 +305,11 @@ void handle_fake_wii_remote_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* 
 
     //     return;
     // }
+
+    if (packet->source_cid == WII_DATA_LOCAL_CID && options_size == 0)
+    {
+        post_bt_packet(create_hci_qos_setup_packet(packet->con_handle, 0, HCI_QOS_BEST_EFFORT, WII_REMOTE_QOS_TOKEN_RATE, WII_REMOTE_QOS_PEAK_BANDWIDTH, WII_REMOTE_QOS_LATENCY, WII_REMOTE_QOS_DELAY_VARIATION));
+    }
 
 }
 
@@ -430,33 +436,28 @@ REQUEST_RESPONSE hid_request_responses[] =
     { NULL, 0, "\xa1\x30\x00\x00", 4 },
     { "\xa2\x1a\x02", 3, "\xa1\x22\x00\x00\x1a\x00", 6 },
     { "\xa2\x11\x12", 3, "\xa1\x22\x00\x00\x11\x00", 6 },
-    { "\xa2\x17\x00\x00\x00\x2a\x00\x38", 8, "\xa1\x21\x00\x00\xf0\x00\x3a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
-    { NULL, 0, "\xa1\x21\x00\x00\xf0\x00\x4a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
-    { NULL, 0, "\xa1\x21\x00\x00\x70\x00\x5a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { "\xa2\x17\x00\x00\x00\x2a\x00\x38", 8, "\xa1\x21\x00\x00\xf0\x00\x2a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0,                               "\xa1\x21\x00\x00\xf0\x00\x3a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0,                               "\xa1\x21\x00\x00\xf0\x00\x4a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0,                               "\xa1\x21\x00\x00\x70\x00\x5a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
     { "\xa2\x17\x00\x00\x00\x62\x00\x38", 8, "\xa1\x21\x00\x00\xf0\x00\x62\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
-    { NULL, 0, "\xa1\x21\x00\x00\xf0\x00\x72\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
-    { NULL, 0, "\xa1\x21\x00\x00\xf0\x00\x82\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
-    { NULL, 0, "\xa1\x21\x00\x00\x70\x00\x92\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0,                               "\xa1\x21\x00\x00\xf0\x00\x72\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0,                               "\xa1\x21\x00\x00\xf0\x00\x82\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0,                               "\xa1\x21\x00\x00\x70\x00\x92\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23 },
     { "\xa2\x17\x00\x00\x00\x00\x00\x2a", 8, "\xa1\x21\x00\x00\xf0\x00\x00\x64\xd2\x8b\x68\xd7\x6c\x89\x03\x6c\x91\x4a\x64\xd2\x8b\x68\xd7", 23 },
-    { NULL, 0, "\xa1\x21\x00\x00\xf0\x00\x10\x6c\x89\x03\x6c\x91\x4a\x7f\x81\x83\x19\x99\x9b\x9c\x0a\x40\x0b", 23 },
-    { NULL, 0, "\xa1\x21\x00\x00\x90\x00\x20\x7f\x81\x83\x19\x99\x9b\x9c\x0a\x40\x0b\x00\x00\x00\x00\x00\x00", 23 },
+    { NULL, 0,                               "\xa1\x21\x00\x00\xf0\x00\x10\x6c\x89\x03\x6c\x91\x4a\x7f\x81\x83\x19\x99\x9b\x9c\x0a\x40\x0b", 23 },
+    { NULL, 0,                               "\xa1\x21\x00\x00\x90\x00\x20\x7f\x81\x83\x19\x99\x9b\x9c\x0a\x40\x0b\x00\x00\x00\x00\x00\x00", 23 },
     { "\xa2\x15\x00", 3, "\xa1\x20\x00\x00\x80\x00\x00\x7d", 8 },
     { "\xa2\x13\x06", 3, "\xa1\x22\x00\x00\x13\x00", 6 },
     { "\xa2\x1a\x06", 3, "\xa1\x22\x00\x00\x1a\x00", 6 },
-    { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x14\xbc\xc4\x00\x00\x00\x07\x00\x00\x00\x02\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x14\x6b\x64\x00\x00\x00\x07\x00\x00\x00\x02\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x14\x9f\xe4\x00\x00\x00\x07\x00\x00\x00\x02\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x14\x56\x64\x00\x00\x00\x07\x00\x00\x00\x02\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x59\x0d\x78\x81\x14\x2c\xbc\x81\x5a\x97\x28\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { "\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\x95\x48\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { "\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\x9c\x5c\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { "\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\xaa\x84\x81", 23, "\xa1\x22\x00\x00\x16\x07", 6 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
-    { NULL, 0, NULL, 0 },
+    { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x14\xbc\xc4\x00\x00\x00\x07\x00\x00\x00\x02\x81", 23, "\xa1\x22\x00\x00\x16\x00", 6 },
+    { "\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\xaa\x84\x81", 23, "\xa1\x22\x00\x00\x16\x00", 6 },
+    { "\xa2\x16\x04\xb0\x00\x30\x01\x01\x00\x15\x00\x59\x0d\x78\x81\x14\x2c\xbc\x81\x5a\x97\x28\x81", 23, "\xa1\x22\x00\x00\x16\x00", 6 },
+    { "\xa2\x16\x04\xb0\x00\x1a\x02\x63\x03\xe0\x00\x11\xc2\x6c\x00\x00\x00\x06\x81\x14\x3b\x04\x81", 23, "\xa1\x22\x00\x00\x16\x00", 6 },
+    { "\xa2\x16\x04\xb0\x00\x00\x09\x02\x00\x00\x71\x01\x00\xaa\x00\x64\x13\xcc\x90\x00\x95\x48\x81", 23, "\xa1\x22\x00\x00\x16\x00", 6 },
+    { "\xa2\x16\x04\xb0\x00\x33\x01\x03\x00\x00\x81\x14\x3b\x0c\x90\x00\x68\x5c\x90\x00\x68\x80\x81", 23, "\xa1\x22\x00\x00\x16\x00", 6 },
+    { "\xa2\x16\x04\xb0\x00\x30\x01\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 23, "\xa1\x22\x00\x00\x16\x00", 6 },
+    { "\xa2\x12\x06\x33", 4, "\xa1\x33\x40\x00\x7f\x81\x9c\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", 19 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
     { NULL, 0, NULL, 0 },
@@ -472,8 +473,8 @@ REQUEST_RESPONSE hid_request_responses[] =
 
 void post_hid_request_reponse(HID_REPORT_PACKET* packet, uint16_t size)
 {    
-    send_disconnect(wii_controller.con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION);
-    return;
+    // send_disconnect(wii_controller.con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION);
+    // return;
 
     uint8_t* p = (uint8_t*)packet;
 
@@ -500,13 +501,40 @@ void post_hid_request_reponse(HID_REPORT_PACKET* packet, uint16_t size)
         }
     }
 
-    printf("no hid request response post_hid_report_packet((uint8_t*)\"");
+    printf("no hid request response post_wii_remote_hid_report_packet(, \"");
     for (int i = 0; i < size; i++)
     {
         printf("\\x%02x", p[i]);
     }
     printf("\", %u);\n", size);
-    send_power_off_disconnect(wii_controller.con_handle);
+
+    if (size == 23 && p[1] == 0x16)
+    {
+        post_hid_report_packet((uint8_t*)"\xa1\x22\x00\x00\x16\x00", 6);
+    }
+    else
+    {
+        send_power_off_disconnect(wii_controller.con_handle);
+    }
+}
+
+TaskHandle_t continous_reporting_task_handle;
+void continous_reporting_task(void* p)
+{
+    uint8_t data_report_id = (uint8_t)(uintptr_t)p;
+    printf("start continous reporting mode on report %x\n", data_report_id);
+    for (;;)
+    {
+        if (data_report_id == 0x30)
+        {
+            post_bt_packet(create_output_report_packet(wii_controller.con_handle, wii_controller.data_cid, (uint8_t*)"\xa1\x30\x00\x00", 4));
+        }
+        else if (data_report_id == 0x33)
+        {
+            post_bt_packet(create_output_report_packet(wii_controller.con_handle, wii_controller.data_cid, (uint8_t*)"\xa1\x33\x40\x00\x7f\x81\x9c\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", 19));
+        }
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
 }
 
 void handle_fake_wii_remote_data_channel(HID_REPORT_PACKET* packet, uint16_t size)
@@ -529,6 +557,27 @@ void handle_fake_wii_remote_data_channel(HID_REPORT_PACKET* packet, uint16_t siz
                 {
                     WII_DATA_REPORTING_MODE_PACKET* drm_mode_packet = (WII_DATA_REPORTING_MODE_PACKET*)packet;
                     printf("data_reporting_mode continuous_reporting %u data_report_id 0x%x\n", drm_mode_packet->continus_reporting_flag, drm_mode_packet->data_report_id);
+                    if (drm_mode_packet->continus_reporting_flag)
+                    {
+                        if (continous_reporting_task_handle == NULL)
+                        {
+                            xTaskCreate(continous_reporting_task, "continous_reporting", 8000, (void*)(uintptr_t)drm_mode_packet->data_report_id, 1, &continous_reporting_task_handle);
+                        }
+                        else
+                        {
+                            vTaskDelete(continous_reporting_task_handle);
+                            continous_reporting_task_handle = NULL;
+                            xTaskCreate(continous_reporting_task, "continous_reporting", 8000, (void*)(uintptr_t)drm_mode_packet->data_report_id, 1, &continous_reporting_task_handle);
+                        }
+                    }
+                    else
+                    {
+                        if (continous_reporting_task_handle != NULL)
+                        {
+                            vTaskDelete(continous_reporting_task_handle);
+                            continous_reporting_task_handle = NULL;
+                        }
+                    }
                     break;
                 }
                 default:
@@ -623,7 +672,7 @@ void connect_and_power_off()
 {
     wii_controller.state = STATE_WII_CONSOLE_POWER_OFF_PENDING;
     //post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x334, 1, false, 0, 1));
-    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x08, 0, false, 0, 1));
+    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x18, 0, false, 2, 1));
 }
 
 void emulate_wii_remote()
@@ -633,8 +682,8 @@ void emulate_wii_remote()
     post_bt_packet(create_hci_write_class_of_device_packet(WII_REMOTE_COD));
     post_bt_packet(create_hci_write_local_name(WII_REMOTE_NAME));
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
-    post_bt_packet(create_hci_write_scan_eanble_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
-    //post_bt_packet(create_hci_write_scan_eanble_packet(HCI_PAGE_SCAN_ENABLE));
+    post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
+    //post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE));
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
     post_bt_packet(create_hci_write_authentication_enable(1));
 

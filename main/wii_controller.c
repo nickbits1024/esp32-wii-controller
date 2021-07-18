@@ -2,8 +2,10 @@
 
 WII_CONTROLLER wii_controller;
 xQueueHandle queue_handle;
+xSemaphoreHandle buffer_sem;
 bd_addr_t device_addr;
 //portMUX_TYPE dump_mux = portMUX_INITIALIZER_UNLOCKED;
+
 
 void queue_io_task(void* p)
 {
@@ -24,6 +26,15 @@ void queue_io_task(void* p)
             {
                 case OUTPUT_PACKET:
                     //vTaskDelay(200 / portTICK_PERIOD_MS);
+
+                    if (env->packet[0] == HCI_ACL_PACKET_TYPE)
+                    {
+                        if (buffer_sem == NULL)
+                        {
+                            abort();
+                        }
+                        xSemaphoreTake(buffer_sem, portMAX_DELAY);
+                    }
 
                     while (!esp_vhci_host_check_send_available());
                     esp_vhci_host_send_packet(env->packet, env->size);
@@ -69,13 +80,14 @@ void wii_controller_init()
     err = nvs_open("default", NVS_READWRITE, &wii_controller.nvs_handle);
     ESP_ERROR_CHECK(err);
 
-    queue_handle = xQueueCreate(32, sizeof(BT_PACKET_ENVELOPE*));
+    queue_handle = xQueueCreate(128, sizeof(BT_PACKET_ENVELOPE*));
 
     err = xTaskCreatePinnedToCore(queue_io_task, "queue_io", 8000, NULL, 1, NULL, 0) == pdPASS ? ESP_OK : ESP_FAIL;
     ESP_ERROR_CHECK(err);
 
     post_bt_packet(create_hci_reset_packet());
     post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_BD_ADDR, 0));
+    post_bt_packet(create_hci_read_buffer_size_packet());
     //post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_LOCAL_NAME, 0));
     //post_bt_packet(create_hci_cmd_packet(HCI_OPCODE_READ_SIMPLE_PAIRING_MODE, 0));    
 }
@@ -416,6 +428,13 @@ void handle_read_bd_addr_complete(HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET* packet)
     printf("read local address complete, status 0x%x addr %s\n", packet->status, bda_to_string(packet->addr));
 }
 
+void handle_read_buffer_size_complete(HCI_READ_BUFFER_SIZE_COMPLETE_PACKET* packet)
+{
+    printf("buffers status %x HC_ACL_Data_Packet_Length %u HC_Total_Num_ACL_Data_Packets %u\n", packet->status, packet->hc_acl_data_packet_length, packet->hc_total_num_acl_data_packets);
+
+    buffer_sem = xSemaphoreCreateCounting(packet->hc_total_num_acl_data_packets, packet->hc_total_num_acl_data_packets);
+}
+
 void handle_read_simple_pairing_mode_complete(HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET* packet)
 {
     printf("read simple pairing mode complete, status 0x%x mode %u\n", packet->status, packet->simple_pairing_mode);
@@ -495,6 +514,9 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
         case HCI_OPCODE_READ_BD_ADDR:
             handle_read_bd_addr_complete((HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET*)packet);
             break;
+        case HCI_OPCODE_READ_BUFFER_SIZE:
+            handle_read_buffer_size_complete((HCI_READ_BUFFER_SIZE_COMPLETE_PACKET*)packet);
+            break;
         case HCI_OPCODE_READ_LOCAL_NAME:
             handle_read_local_name_complete((HCI_READ_LOCAL_NAME_COMPLETE_PACKET*)packet);
             break;
@@ -539,7 +561,7 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
             break;
         case HCI_OPCODE_WRITE_PIN_TYPE:
             handle_write_pin_type((HCI_WRITE_PIN_TYPE_COMPLETE_PACKET*)packet);
-            break;
+            break;    
         default:
             printf("unhandled command complete 0x%04x\n", op_code);
             break;
@@ -564,6 +586,11 @@ void handle_number_of_completed_packets(uint8_t* packet, uint16_t size)
         uint16_t num_completed = read_uint16(p + 2);
 
         printf("number_of_completed_packets handle 0x%x completed %u\n", con_handle, num_completed);
+
+        for (int j = 0; j < num_completed; j++)
+        {
+            xSemaphoreGive(buffer_sem);
+        }
 
         p += 4;
     }
@@ -695,6 +722,18 @@ void handle_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
 #define DUMP_WIDTH 32
 void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
 {
+#ifdef WII_REMOTE_TEST
+    if (io_direction == INPUT_PACKET)
+    {
+        if ((size == 13 && memcmp(packet, (uint8_t*)"\x02\x81\x20\x08\x00\x04\x00\x13\x01\xa1\x30\x00\x00", 13) == 0) ||
+            (size == 28 && memcmp(packet, (uint8_t*)"\x02\x81\x20\x17\x00\x13\x00\x13\x01\xa1\x33\x20\x60\x80\x81\x9c\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", 28) == 0))
+        {
+            return;
+        }
+    }
+
+#endif
+
     static uint16_t last_channel;
 
     for (int i = 0; i < size; i++)

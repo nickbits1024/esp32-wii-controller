@@ -5,6 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "endian.h"
 #include "nvs_flash.h"
 #include "esp_system.h"
@@ -47,6 +48,12 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
 #define WII_MTU                     640
 #define WII_FLUSH_TIMEOUT           0xffff
+
+#define WII_REMOTE_QOS_TOKEN_RATE       1700
+#define WII_REMOTE_QOS_PEAK_BANDWIDTH   0
+#define WII_REMOTE_QOS_LATENCY          10000
+#define WII_REMOTE_QOS_DELAY_VARIATION  0xffffffff
+
 
 #define WII_REMOTE_COD          0x002504
 #define WII_COD                 0x000448

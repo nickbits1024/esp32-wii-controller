@@ -1,6 +1,6 @@
 #include "wii_controller.h"
 
-uint8_t l2cap_identifier;
+uint8_t l2cap_identifier = 1;
 
 // void reverse_bda(bd_addr_t bda)
 // {
@@ -108,6 +108,11 @@ BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size)
 BT_PACKET_ENVELOPE* create_hci_reset_packet()
 {
     return create_hci_cmd_packet(HCI_OPCODE_RESET, 0);
+}
+
+BT_PACKET_ENVELOPE* create_hci_read_buffer_size_packet()
+{
+    return create_hci_cmd_packet(HCI_OPCODE_READ_BUFFER_SIZE, 0);
 }
 
 BT_PACKET_ENVELOPE* create_hci_inquiry_packet(uint32_t lap, uint8_t duration, uint8_t num_responses)
@@ -244,7 +249,7 @@ BT_PACKET_ENVELOPE* create_hci_set_connection_encryption(uint16_t con_handle, ui
 }
 
 
-BT_PACKET_ENVELOPE* create_hci_write_scan_eanble_packet(uint8_t scan_enable)
+BT_PACKET_ENVELOPE* create_hci_write_scan_enable_packet(uint8_t scan_enable)
 {
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_SCAN_ENABLE, PARAMS_SIZE(HCI_WRITE_SCAN_ENABLE_PACKET));
     HCI_WRITE_SCAN_ENABLE_PACKET* packet = (HCI_WRITE_SCAN_ENABLE_PACKET*)env->packet;
@@ -315,6 +320,23 @@ BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint16_t s
     packet->secure_connections_host_support  = secure_connections_host_support;
 
     return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_qos_setup_packet(uint16_t con_handle, uint8_t flags, uint8_t service_type, uint32_t token_rate, uint32_t peak_bandwidth, uint32_t latency, uint32_t delay_variation)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_QOS_SETUP, PARAMS_SIZE(HCI_QOS_SETUP_PACKET));
+    HCI_QOS_SETUP_PACKET* packet = (HCI_QOS_SETUP_PACKET*)env->packet;
+
+    packet->con_handle = con_handle;
+    packet->flags = flags;
+    packet->service_type = service_type;
+    packet->token_rate = token_rate;
+    packet->peak_bandwidth = peak_bandwidth;
+    packet->latency = latency;
+    packet->delay_variation = delay_variation;
+
+    return env;
+
 }
 
 BT_PACKET_ENVELOPE* create_hci_current_iac_lap_packet(uint32_t iac_lap)
@@ -462,6 +484,22 @@ BT_PACKET_ENVELOPE* create_l2cap_config_response_packet(uint16_t con_handle, uin
     return env;
 }
 
+BT_PACKET_ENVELOPE* create_l2cap_disconnection_request_packet(uint16_t con_handle, uint16_t dest_cid, uint16_t source_cid)
+{
+    uint16_t size = sizeof(L2CAP_DISCONNECTION_REQUEST_PACKET);
+    uint16_t payload_size = size - sizeof(L2CAP_SIGNAL_CHANNEL_PACKET);
+    BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, L2CAP_SIGNAL_CHANNEL);
+    L2CAP_DISCONNECTION_REQUEST_PACKET* packet = (L2CAP_DISCONNECTION_REQUEST_PACKET*)env->packet;
+
+    packet->code = L2CAP_DISCONNECTION_REQUEST;
+    packet->identifier = l2cap_identifier++;
+    packet->payload_size = payload_size;
+    packet->source_cid = source_cid;
+    packet->dest_cid = dest_cid;
+
+    return env;
+}
+
 BT_PACKET_ENVELOPE* create_l2cap_disconnection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t dest_cid, uint16_t source_cid)
 {
     uint16_t size = sizeof(L2CAP_DISCONNECTION_RESPONSE_PACKET);
@@ -477,7 +515,6 @@ BT_PACKET_ENVELOPE* create_l2cap_disconnection_response_packet(uint16_t con_hand
 
     return env;
 }
-
 
 BT_PACKET_ENVELOPE* create_output_report_packet(uint16_t con_handle, uint16_t channel, uint8_t* report, uint16_t report_size)
 {
