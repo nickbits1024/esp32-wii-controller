@@ -122,10 +122,8 @@ void handle_wii_mitm_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* p
         {
             wii_controller.wii_con_handle = packet->con_handle;
             //wii_controller.state = WII_MITM_CONNECTED;
-            wii_controller.state = WII_MITM_DISCOVERY;
+            wii_controller.state = WII_MITM_WAIT_FIRST_PACKET;
             printf("wii connected con_handle 0x%x...\n", packet->con_handle);
-
-            find_wii_remote();
         }
         else if (wii_controller.state == WII_MITM_DISCOVERED)
         {
@@ -194,6 +192,13 @@ void wii_mitm_transfer_packet(uint8_t* packet, uint16_t size)
     else
     {
         printf("packet transfer pending\n");
+        if (wii_controller.state == WII_MITM_WAIT_FIRST_PACKET)
+        {
+            wii_controller.state = WII_MITM_DISCOVERY;
+            find_wii_remote();
+            printf("pair wii remote NOW!\n");
+        }
+
         xQueueSend(transfer_queue_handle, &env, portMAX_DELAY);
     }
 }
@@ -265,7 +270,7 @@ void wii_mitm()
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
-    post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
+    //post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
     //post_bt_packet(create_hci_write_authentication_enable(1));
 
     transfer_queue_handle = xQueueCreate(10, sizeof(BT_PACKET_ENVELOPE*));
