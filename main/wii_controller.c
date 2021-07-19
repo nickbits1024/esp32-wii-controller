@@ -5,59 +5,80 @@ WII_CONTROLLER wii_controller =
     .wii_con_handle = INVALID_HANDLE_VALUE,
     .wii_remote_con_handle = INVALID_HANDLE_VALUE
 };
-xQueueHandle queue_handle;
-xSemaphoreHandle buffer_sem;
+xSemaphoreHandle output_queue_ready_sem;
+xQueueHandle output_queue_handle;
+//xSemaphoreHandle input_queue_sem;
+xQueueHandle input_queue_handle;
+xSemaphoreHandle controller_buffers_sem;
 bd_addr_t device_addr;
 //portMUX_TYPE dump_mux = portMUX_INITIALIZER_UNLOCKED;
 
 
-void queue_io_task(void* p)
+void output_queue_task(void* p)
 {
-    for (;;)
+    bool first_acl_send = true;
+    while (true)
     {
         BT_PACKET_ENVELOPE* env;
 
-        if (xQueueReceive(queue_handle, &env, portMAX_DELAY))
+        if (xQueueReceive(output_queue_handle, &env, portMAX_DELAY) == pdPASS)
         {
-            // printf("send size %3u data ", env->size);
-            // for (int i = 0; i < env->size; i++)
-            // {
-            //     printf("%02x ", env->packet[i]);
-            // }
-            // printf("\n");
-            dump_packet(env->io_direction, env->packet, env->size);
-            switch (env->io_direction)
+            dump_packet(OUTPUT, env->packet, env->size);
+
+            HCI_PACKET* hci_packet = (HCI_PACKET*)env->packet;
+
+            if (hci_packet->type == HCI_ACL_PACKET_TYPE)
             {
-                case OUTPUT_PACKET:
-                    //vTaskDelay(200 / portTICK_PERIOD_MS);
+                if (first_acl_send)
+                {
+                    xSemaphoreTake(output_queue_ready_sem, portMAX_DELAY);
+                    first_acl_send = false;
+                }
+                xSemaphoreTake(controller_buffers_sem, portMAX_DELAY);
+            }
 
-                    if (env->packet[0] == HCI_ACL_PACKET_TYPE)
-                    {
-                        if (buffer_sem == NULL)
-                        {
-                            abort();
-                        }
-                        xSemaphoreTake(buffer_sem, portMAX_DELAY);
-                    }
+            while (!esp_vhci_host_check_send_available());
+            esp_vhci_host_send_packet(env->packet, env->size);
+            
+            if (hci_packet->type == HCI_ACL_PACKET_TYPE)
+            {
+                HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)hci_packet;
+                uint16_t con_handles[1] = { acl_packet->con_handle };
+                uint16_t num_complete[1] = { 1 };
+                BT_PACKET_ENVELOPE* hncp_env = create_hci_host_number_of_completed_packets_packet(1, con_handles, num_complete);
 
-                    while (!esp_vhci_host_check_send_available());
-                    esp_vhci_host_send_packet(env->packet, env->size);
-                    break;
-                case INPUT_PACKET:
-#if defined(WII_REMOTE_HOST)
-                    wii_remote_packet_handler(env->packet, env->size);
-#elif defined(WII_MITM)
-                    wii_mitm_packet_handler(env->packet, env->size);
-#else
-                    fake_wii_remote_packet_handler(env->packet, env->size);
-#endif
-                    break;
-                default:
-                    abort();
-                    break;
+                while (!esp_vhci_host_check_send_available());
+                esp_vhci_host_send_packet(hncp_env->packet, hncp_env->size);
+
+                free(hncp_env);
+                env = NULL;
             }
 
             free(env);
+            env = NULL;
+        }
+    }
+}
+
+void input_queue_task(void* p)
+{
+    while (true)
+    {
+        BT_PACKET_ENVELOPE* env;
+
+        if (xQueueReceive(input_queue_handle, &env, portMAX_DELAY) == pdPASS)
+        {
+            dump_packet(INPUT, env->packet, env->size);
+#if defined(WII_REMOTE_HOST)
+            wii_remote_packet_handler(env->packet, env->size);
+#elif defined(WII_MITM)
+            wii_mitm_packet_handler(env->packet, env->size);
+#else
+            fake_wii_remote_packet_handler(env->packet, env->size);
+#endif
+
+            free(env);
+            env = NULL;
         }
     }
 }
@@ -65,13 +86,13 @@ void queue_io_task(void* p)
 int queue_packet_handler(uint8_t* packet, uint16_t size)
 {
     BT_PACKET_ENVELOPE* env = create_packet_envelope(size);
-    env->io_direction = INPUT_PACKET;
+    //env->io_direction = INPUT_PACKET;
     memcpy(env->packet, packet, size);
 
-    if (xQueueSend(queue_handle, &env, 0) != pdPASS)
+    if (xQueueSend(input_queue_handle, &env, 0) != pdPASS)
     {
         printf("queue full (recv)\n");
-        xQueueSend(queue_handle, &env, portMAX_DELAY);
+        xQueueSend(input_queue_handle, &env, portMAX_DELAY);
     }
 
     return 0;
@@ -79,11 +100,11 @@ int queue_packet_handler(uint8_t* packet, uint16_t size)
 
 void post_bt_packet(BT_PACKET_ENVELOPE* env)
 {
-    env->io_direction = OUTPUT_PACKET;
-    if (xQueueSend(queue_handle, &env, 0) != pdPASS)
+    //env->io_direction = OUTPUT_PACKET;
+    if (xQueueSend(output_queue_handle, &env, 0) != pdPASS)
     {
         printf("queue full (send)\n");
-        xQueueSend(queue_handle, &env, portMAX_DELAY);
+        xQueueSend(output_queue_handle, &env, portMAX_DELAY);
     }
 }
 
@@ -94,9 +115,15 @@ void wii_controller_init()
     err = nvs_open("default", NVS_READWRITE, &wii_controller.nvs_handle);
     ESP_ERROR_CHECK(err);
 
-    queue_handle = xQueueCreate(128, sizeof(BT_PACKET_ENVELOPE*));
+    output_queue_ready_sem = xSemaphoreCreateBinary();
+    //queue_sem = xSemaphoreCreateCounting(32, 0);
+    output_queue_handle = xQueueCreate(32, sizeof(BT_PACKET_ENVELOPE*));
+    input_queue_handle = xQueueCreate(32, sizeof(BT_PACKET_ENVELOPE*));
 
-    err = xTaskCreatePinnedToCore(queue_io_task, "queue_io", 8000, NULL, 1, NULL, 0) == pdPASS ? ESP_OK : ESP_FAIL;
+    err = xTaskCreatePinnedToCore(input_queue_task, "input_queue", 8000, NULL, 1, NULL, 0) == pdPASS ? ESP_OK : ESP_FAIL;
+    ESP_ERROR_CHECK(err);
+
+    err = xTaskCreatePinnedToCore(output_queue_task, "output_queue", 8000, NULL, 1, NULL, 0) == pdPASS ? ESP_OK : ESP_FAIL;
     ESP_ERROR_CHECK(err);
 
     post_bt_packet(create_hci_reset_packet());
@@ -446,7 +473,12 @@ void handle_read_buffer_size_complete(HCI_READ_BUFFER_SIZE_COMPLETE_PACKET* pack
 {
     printf("buffers status %x HC_ACL_Data_Packet_Length %u HC_Total_Num_ACL_Data_Packets %u\n", packet->status, packet->hc_acl_data_packet_length, packet->hc_total_num_acl_data_packets);
 
-    buffer_sem = xSemaphoreCreateCounting(packet->hc_total_num_acl_data_packets, packet->hc_total_num_acl_data_packets);
+    if (controller_buffers_sem == NULL)
+    {
+        controller_buffers_sem = xSemaphoreCreateCounting(packet->hc_total_num_acl_data_packets, packet->hc_total_num_acl_data_packets);
+
+        xSemaphoreGive(output_queue_ready_sem);
+    }
 }
 
 void handle_read_simple_pairing_mode_complete(HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET* packet)
@@ -575,7 +607,7 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
             break;
         case HCI_OPCODE_WRITE_PIN_TYPE:
             handle_write_pin_type((HCI_WRITE_PIN_TYPE_COMPLETE_PACKET*)packet);
-            break;    
+            break;
         case HCI_OPCODE_WRITE_ENCRYPTION_MODE:
             handle_write_encryption_mode_complete((HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET*)packet);
             break;
@@ -606,7 +638,7 @@ void handle_number_of_completed_packets(uint8_t* packet, uint16_t size)
 
         for (int j = 0; j < num_completed; j++)
         {
-            xSemaphoreGive(buffer_sem);
+            xSemaphoreGive(controller_buffers_sem);
         }
 
         p += 4;
@@ -757,7 +789,7 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
     {
         if (i % DUMP_WIDTH == 0 && i == 0)
         {
-            printf("%s %3u | ", io_direction == OUTPUT_PACKET ? "send" : "recv", size);
+            printf("%s %3u | ", io_direction == OUTPUT  ? "send" : "recv", size);
         }
         else
         {
@@ -842,7 +874,7 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
                 local_channel = last_channel;
             }
 
-            if (io_direction == OUTPUT_PACKET)
+            if (io_direction == OUTPUT)
             {
                 if (local_channel == wii_controller.sdp_cid)
                 {
@@ -876,7 +908,7 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
                         printf("sdp\n");
                         break;
                     default:
-                        printf("unhandled l2cap channel 0x%x con_handle 0x%x\n", l2cap_packet->channel, l2cap_packet->con_handle);
+                        printf("l2cap channel 0x%x con_handle 0x%x\n", l2cap_packet->channel, l2cap_packet->con_handle);
                         break;
                 }
             }

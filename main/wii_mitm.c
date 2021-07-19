@@ -178,7 +178,7 @@ void wii_mitm_flush_queue()
 void wii_mitm_transfer_packet(uint8_t* packet, uint16_t size)
 {
     BT_PACKET_ENVELOPE* env = create_packet_envelope(size);
-    env->io_direction = OUTPUT_PACKET;
+    //env->io_direction = OUTPUT_PACKET;
     memcpy(env->packet, packet, size);
 
     if (wii_controller.wii_con_handle != INVALID_HANDLE_VALUE &&
@@ -270,7 +270,9 @@ void wii_mitm()
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
-    //post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
+    post_bt_packet(create_hci_host_buffer_size_packet(HOST_ACL_BUFFER_SIZE, HOST_SCO_BUFFER_SIZE, HOST_NUM_ACL_BUFFERS, HOST_NUM_SCO_BUFFERS));
+    post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
+
     //post_bt_packet(create_hci_write_authentication_enable(1));
 
     transfer_queue_handle = xQueueCreate(10, sizeof(BT_PACKET_ENVELOPE*));

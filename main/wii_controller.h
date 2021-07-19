@@ -41,6 +41,14 @@ void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint
 void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
+#define OUTPUT 1
+#define INPUT 2
+
+#define HOST_ACL_BUFFER_SIZE         0xffff
+#define HOST_NUM_ACL_BUFFERS         5
+#define HOST_SCO_BUFFER_SIZE         0xff
+#define HOST_NUM_SCO_BUFFERS         5
+
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
 #define SDP_PSM                     0x01
 #define WII_CONTROL_PSM             0x11
