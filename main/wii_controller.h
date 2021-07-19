@@ -12,26 +12,34 @@
 #include "esp_spi_flash.h"
 #include "esp_bt.h"
 
+//#define WII_REMOTE_HOST
+#define WII_MITM
+
 #include "bt.h"
 #include "wii_bt.h"
 
 void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size);
 void wii_controller_init();
 int queue_packet_handler(uint8_t* packet, uint16_t size);
+
 void wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 void fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size);
-void wii_remote_test();
-void emulate_wii_remote();
-void open_control_channel();
-void open_data_channel();
-void post_hid_report_packet(uint8_t* hid_report, uint16_t report_size);
-void post_sdp_packet(uint16_t l2cap_size, uint8_t* data, uint16_t data_size);
-void post_sdp_packet_fragment(uint8_t* data, uint16_t data_size);
+void wii_mitm_packet_handler(uint8_t* packet, uint16_t size);
+
+void wii_remote_host();
+void fake_wii_remote();
+void wii_mitm();
+
+void find_wii_remote();
+
+void open_control_channel(uint16_t con_handle);
+void open_data_channel(uint16_t con_handle);
+void post_hid_report_packet(uint16_t con_handle, uint8_t* hid_report, uint16_t report_size);
+void post_sdp_packet(uint16_t con_handle, uint16_t l2cap_size, uint8_t* data, uint16_t data_size);
+void post_sdp_packet_fragment(uint16_t con_handle, uint8_t* data, uint16_t data_size);
 void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu);
 void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
-
-//#define WII_REMOTE_TEST
 
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
 #define SDP_PSM                     0x01
@@ -82,14 +90,19 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
 typedef enum
 {
-    STATE_WII_CONSOLE_PAIRING_PENDING = 1,
-    STATE_WII_CONSOLE_PAIRING_STARTED,
-    STATE_WII_CONSOLE_PAIRING_COMPLETE,
-    STATE_WII_CONSOLE_POWER_OFF_PENDING,
-    STATE_WII_CONSOLE_POWER_OFF_CONNECTED,
-    STATE_WII_REMOTE_PAIRING_PENDING,
-    STATE_WII_REMOTE_PAIRING_STARTED,
-    STATE_WII_REMOTE_PAIRING_COMPLETE
+    WII_CONSOLE_PAIRING_PENDING = 1,
+    WII_CONSOLE_PAIRING_STARTED,
+    WII_CONSOLE_PAIRING_COMPLETE,
+    WII_CONSOLE_POWER_OFF_PENDING,
+    WII_CONSOLE_POWER_OFF_CONNECTED,
+    WII_REMOTE_PAIRING_PENDING,
+    WII_REMOTE_PAIRING_STARTED,
+    WII_REMOTE_PAIRING_COMPLETE,
+    WII_MITM_DISCOVERY,
+    WII_MITM_DISCOVERED,
+    WII_MITM_PAIRING_PENDING,
+    WII_MITM_CONNECTING,
+    WII_MITM_CONNECTED
 } 
 WII_CONTROLLER_STATE;
 
@@ -97,7 +110,8 @@ typedef struct
 {
     nvs_handle_t nvs_handle;
     WII_CONTROLLER_STATE state;
-    uint16_t con_handle;
+    uint16_t wii_con_handle;
+    uint16_t wii_remote_con_handle;
     uint16_t sdp_cid;
     uint16_t control_cid;
     uint16_t data_cid;
@@ -131,6 +145,12 @@ typedef struct
     uint8_t data_report_id;
 }
 __attribute__((packed)) WII_DATA_REPORTING_MODE_PACKET;
+
+typedef struct _FOUND_DEVICE
+{
+    bd_addr_t addr;
+    struct _FOUND_DEVICE* next;
+} DISCOVERED_DEVICE;
 
 extern WII_CONTROLLER wii_controller;
 

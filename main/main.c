@@ -1,10 +1,10 @@
 #include "wii_controller.h"
 
-#ifdef WII_REMOTE_TEST
-#define SPOOF_WIIMOTE
-#else
-#define SPOOF_WIIMOTE
-#endif
+// #ifdef WII_REMOTE_HOST
+// #define SPOOF_WIIMOTE
+// #else
+// #define SPOOF_WIIMOTE
+// #endif
 
 void app_main(void)
 {
@@ -35,7 +35,8 @@ void app_main(void)
 #endif
 
     esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
@@ -60,9 +61,12 @@ void app_main(void)
     ret = esp_vhci_host_register_callback(&vhci_host_cb);
     ESP_ERROR_CHECK(ret);
 
-#ifdef WII_REMOTE_TEST
-    wii_remote_test();
+#if defined(WII_REMOTE_HOST)
+    wii_remote_host();
+#elif defined(WII_MITM)
+    wii_mitm();
 #else
-    emulate_wii_remote();
+    fake_wii_remote();
 #endif
+
 }

@@ -2,7 +2,7 @@
 
 #define WII_ADDR_BLOB_NAME  "wii_addr"
 
-
+#if !defined(WII_REMOTE_HOST) && !defined(WII_MITM)
 bd_addr_t wii_addr;
 
 void send_disconnect(uint16_t con_handle, uint8_t reason);
@@ -28,25 +28,26 @@ void handle_fake_wii_remote_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACK
 void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* packet)
 {
     printf("connection complete addr %s status 0x%02x con_handle 0x%x, link_type %u encrypted %u\n", bda_to_string(packet->addr), packet->status, packet->con_handle, packet->link_type, packet->encryption_enabled);
-    if (packet->status == ERROR_CODE_SUCCESS)
+    if (1 || packet->status == ERROR_CODE_SUCCESS)
     {
-        wii_controller.con_handle = packet->con_handle;
+        wii_controller.wii_con_handle = packet->con_handle;
         switch (wii_controller.state)
         {
-            case STATE_WII_CONSOLE_PAIRING_PENDING:
+            case WII_CONSOLE_PAIRING_PENDING:
                 memcpy(wii_addr, packet->addr, BDA_SIZE);
 
-                wii_controller.state = STATE_WII_CONSOLE_PAIRING_STARTED;
+                wii_controller.state = WII_CONSOLE_PAIRING_STARTED;
                 //unnecessary
                 //printf("pairing started...\n");
                 //post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
                 break;
-            case STATE_WII_CONSOLE_POWER_OFF_PENDING:
+            case WII_CONSOLE_POWER_OFF_PENDING:
                 //send_power_off_disconnect(packet->con_handle);
-                wii_controller.state = STATE_WII_CONSOLE_POWER_OFF_CONNECTED;
+                wii_controller.state = WII_CONSOLE_POWER_OFF_CONNECTED;
                 //post_bt_packet(create_hci_set_connection_encryption(packet->con_handle, 1));
-                open_control_channel();
-                open_data_channel();
+                //open_control_channel();
+                //open_data_channel();
+                post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
                 break;
             default:
                 break;
@@ -56,7 +57,7 @@ void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PA
     {
         switch (wii_controller.state)
         {
-            // case STATE_WII_CONSOLE_POWER_OFF_PENDING:
+            // case WII_CONSOLE_POWER_OFF_PENDING:
             //     printf("requesting auth...\n");
             //     post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
             //     break;
@@ -75,12 +76,12 @@ void handle_fake_wii_remote_link_key_request(HCI_LINK_KEY_REQUEST_EVENT_PACKET* 
 
     switch (wii_controller.state)
     {
-        case STATE_WII_CONSOLE_PAIRING_PENDING:
-        case STATE_WII_CONSOLE_PAIRING_STARTED:
+        case WII_CONSOLE_PAIRING_PENDING:
+        case WII_CONSOLE_PAIRING_STARTED:
             printf("rejecting link key request from %s...\n", bda_to_string(packet->addr));
             post_bt_packet(create_hci_link_key_request_negative_packet(packet->addr));
             break;
-        case STATE_WII_CONSOLE_POWER_OFF_PENDING:
+        case WII_CONSOLE_POWER_OFF_PENDING:
         {
             uint8_t link_key[HCI_LINK_KEY_SIZE];
             size_t size = HCI_LINK_KEY_SIZE;
@@ -110,9 +111,9 @@ void handle_fake_wii_remote_pin_code_request(HCI_PIN_CODE_REQUEST_EVENT_PACKET* 
 
     switch (wii_controller.state)
     {
-        case STATE_WII_CONSOLE_PAIRING_PENDING:
-        case STATE_WII_CONSOLE_PAIRING_STARTED:
-        case STATE_WII_CONSOLE_POWER_OFF_PENDING:
+        case WII_CONSOLE_PAIRING_PENDING:
+        case WII_CONSOLE_PAIRING_STARTED:
+        case WII_CONSOLE_POWER_OFF_PENDING:
         {
             uint8_t pin[6];
             //write_bda(pin, device_addr);
@@ -123,7 +124,7 @@ void handle_fake_wii_remote_pin_code_request(HCI_PIN_CODE_REQUEST_EVENT_PACKET* 
             post_bt_packet(create_hci_pin_code_request_reply_packet(packet->addr, pin, BDA_SIZE));
             break;
         }
-        // case STATE_WII_CONSOLE_POWER_OFF_PENDING:
+        // case WII_CONSOLE_POWER_OFF_PENDING:
         //     post_bt_packet(create_hci_pin_code_request_negative_reply_packet(packet->addr));
         //     break;
         default:
@@ -135,9 +136,9 @@ void handle_fake_wii_remote_authentication_complete(HCI_AUTHENTICATION_COMPLETE_
 {
     printf("auth complete con_handle 0x%x status 0x%x\n", packet->con_handle, packet->status);
 
-    if (wii_controller.state == STATE_WII_CONSOLE_PAIRING_STARTED)
+    if (wii_controller.state == WII_CONSOLE_PAIRING_STARTED)
     {
-        wii_controller.state = packet->status == ERROR_CODE_SUCCESS ? STATE_WII_CONSOLE_PAIRING_COMPLETE : 0;
+        wii_controller.state = packet->status == ERROR_CODE_SUCCESS ? WII_CONSOLE_PAIRING_COMPLETE : 0;
 
         if (packet->status == ERROR_CODE_SUCCESS)
         {
@@ -155,7 +156,7 @@ void handle_fake_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PA
 {
     //printf("l2cap connection request con_handle 0x%x id 0x%x psm 0x%x source_cid 0x%x\n", packet->con_handle, packet->identifier, packet->psm, packet->source_cid);
 
-    wii_controller.con_handle = packet->con_handle;
+    wii_controller.wii_con_handle = packet->con_handle;
     uint16_t response_dest_cid;
     //uint16_t mtu = WII_REMOTE_MTU;
     uint16_t result = L2CAP_CONNECTION_RESULT_SUCCESS;
@@ -165,19 +166,19 @@ void handle_fake_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PA
             wii_controller.sdp_cid = packet->source_cid;
             response_dest_cid = SDP_LOCAL_CID;
             //mtu = WII_SDP_MTU;
-            printf("set wii_controller.con_handle 0x%x wii_controller.sdp_cid=0x%x\n", wii_controller.con_handle, wii_controller.sdp_cid);
+            printf("set wii_controller.con_handle 0x%x wii_controller.sdp_cid=0x%x\n", wii_controller.wii_con_handle, wii_controller.sdp_cid);
             break;
         case WII_CONTROL_PSM:
             wii_controller.control_cid = packet->source_cid;
             response_dest_cid = WII_CONTROL_LOCAL_CID;
             result = L2CAP_CONNECTION_RESULT_PENDING;
-            printf("set wii_controller.con_handle 0x%x wii_controller.control_cid=0x%x\n", wii_controller.con_handle, wii_controller.control_cid);
+            printf("set wii_controller.con_handle 0x%x wii_controller.control_cid=0x%x\n", wii_controller.wii_con_handle, wii_controller.control_cid);
             break;
         case WII_DATA_PSM:
             wii_controller.data_cid = packet->source_cid;
             response_dest_cid = WII_DATA_LOCAL_CID;
             //result = L2CAP_CONNECTION_RESULT_PENDING;
-            printf("set wii_controller.con_handle 0x%x wii_controller.data_cid=0x%x\n", wii_controller.con_handle, wii_controller.data_cid);
+            printf("set wii_controller.con_handle 0x%x wii_controller.data_cid=0x%x\n", wii_controller.wii_con_handle, wii_controller.data_cid);
             break;
         default:
             response_dest_cid = 0;
@@ -203,7 +204,7 @@ void handle_fake_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_
     //printf("l2cap conn response con_handle 0x%x dest_cid 0x%x source_cid 0x%x result 0x%x status 0x%x\n",
     //    response_packet->con_handle, response_packet->dest_cid, response_packet->source_cid, response_packet->result, response_packet->status);
 
-    if (wii_controller.state == STATE_WII_CONSOLE_POWER_OFF_CONNECTED)
+    if (wii_controller.state == WII_CONSOLE_POWER_OFF_CONNECTED)
     {
         if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_RESULT_SUCCESS)
         {
@@ -218,11 +219,11 @@ void handle_fake_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_
         {
             case WII_CONTROL_LOCAL_CID:
                 wii_controller.control_cid = response_packet->dest_cid;
-                printf("set wii_controller.control_cid 0x%x wii_remote_control_cid=0x%x\n", wii_controller.con_handle, wii_controller.control_cid);
+                printf("set wii_controller.control_cid 0x%x wii_remote_control_cid=0x%x\n", wii_controller.wii_con_handle, wii_controller.control_cid);
                 break;
             case WII_DATA_LOCAL_CID:
                 wii_controller.data_cid = response_packet->dest_cid;
-                printf("set wii_controller.data_cid 0x%x wii_remote_data_cid=0x%x\n", wii_controller.con_handle, wii_controller.data_cid);
+                printf("set wii_controller.data_cid 0x%x wii_remote_data_cid=0x%x\n", wii_controller.wii_con_handle, wii_controller.data_cid);
                 break;
         }
     }
@@ -670,12 +671,12 @@ void send_disconnect(uint16_t con_handle, uint8_t reason)
 
 void connect_and_power_off()
 {
-    wii_controller.state = STATE_WII_CONSOLE_POWER_OFF_PENDING;
+    wii_controller.state = WII_CONSOLE_POWER_OFF_PENDING;
     //post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x334, 1, false, 0, 1));
     post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x18, 0, false, 2, 1));
 }
 
-void emulate_wii_remote()
+void fake_wii_remote()
 {
     post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH | HCI_LINK_POLICY_ENABLE_SNIFF_MODE | HCI_LINK_POLICY_ENABLE_HOLD_MODE));
     //post_bt_packet(create_hci_secure_connections_host_support_packet(1));
@@ -684,19 +685,21 @@ void emulate_wii_remote()
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
     //post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE));
-    post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
-    post_bt_packet(create_hci_write_authentication_enable(1));
+    //post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
+    //post_bt_packet(create_hci_write_authentication_enable(1));
+    //post_bt_packet(create_hci_write_encryption_mode(1));
 
     size_t size = BDA_SIZE;
     esp_err_t ret = nvs_get_blob(wii_controller.nvs_handle, WII_ADDR_BLOB_NAME, wii_addr, &size);
-    if (0 && ret == ESP_OK && size == BDA_SIZE)
+    if (ret == ESP_OK && size == BDA_SIZE)
     {
         printf("stored wii at %s\n", bda_to_string(wii_addr));
         connect_and_power_off();
     }
     else
     {
-        wii_controller.state = STATE_WII_CONSOLE_PAIRING_PENDING;
+        wii_controller.state = WII_CONSOLE_PAIRING_PENDING;
     }
 }
 
+#endif

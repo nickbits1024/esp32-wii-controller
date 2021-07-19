@@ -1,6 +1,10 @@
 #include "wii_controller.h"
 
-WII_CONTROLLER wii_controller;
+WII_CONTROLLER wii_controller =
+{
+    .wii_con_handle = INVALID_HANDLE_VALUE,
+    .wii_remote_con_handle = INVALID_HANDLE_VALUE
+};
 xQueueHandle queue_handle;
 xSemaphoreHandle buffer_sem;
 bd_addr_t device_addr;
@@ -40,8 +44,10 @@ void queue_io_task(void* p)
                     esp_vhci_host_send_packet(env->packet, env->size);
                     break;
                 case INPUT_PACKET:
-#ifdef WII_REMOTE_TEST
+#if defined(WII_REMOTE_HOST)
                     wii_remote_packet_handler(env->packet, env->size);
+#elif defined(WII_MITM)
+                    wii_mitm_packet_handler(env->packet, env->size);
 #else
                     fake_wii_remote_packet_handler(env->packet, env->size);
 #endif
@@ -62,7 +68,11 @@ int queue_packet_handler(uint8_t* packet, uint16_t size)
     env->io_direction = INPUT_PACKET;
     memcpy(env->packet, packet, size);
 
-    xQueueSend(queue_handle, &env, portMAX_DELAY);
+    if (xQueueSend(queue_handle, &env, 0) != pdPASS)
+    {
+        printf("queue full (recv)\n");
+        xQueueSend(queue_handle, &env, portMAX_DELAY);
+    }
 
     return 0;
 }
@@ -70,7 +80,11 @@ int queue_packet_handler(uint8_t* packet, uint16_t size)
 void post_bt_packet(BT_PACKET_ENVELOPE* env)
 {
     env->io_direction = OUTPUT_PACKET;
-    xQueueSend(queue_handle, &env, portMAX_DELAY);
+    if (xQueueSend(queue_handle, &env, 0) != pdPASS)
+    {
+        printf("queue full (send)\n");
+        xQueueSend(queue_handle, &env, portMAX_DELAY);
+    }
 }
 
 void wii_controller_init()
@@ -562,6 +576,9 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
         case HCI_OPCODE_WRITE_PIN_TYPE:
             handle_write_pin_type((HCI_WRITE_PIN_TYPE_COMPLETE_PACKET*)packet);
             break;    
+        case HCI_OPCODE_WRITE_ENCRYPTION_MODE:
+            handle_write_encryption_mode_complete((HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET*)packet);
+            break;
         default:
             printf("unhandled command complete 0x%04x\n", op_code);
             break;
@@ -722,7 +739,7 @@ void handle_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
 #define DUMP_WIDTH 32
 void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
 {
-#ifdef WII_REMOTE_TEST
+#ifdef WII_REMOTE_HOST
     if (io_direction == INPUT_PACKET)
     {
         if ((size == 13 && memcmp(packet, (uint8_t*)"\x02\x81\x20\x08\x00\x04\x00\x13\x01\xa1\x30\x00\x00", 13) == 0) ||
@@ -889,17 +906,17 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
     }
 }
 
-void open_control_channel()
+void open_control_channel(uint16_t con_handle)
 {
-    post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, WII_CONTROL_PSM, WII_CONTROL_LOCAL_CID));
+    post_bt_packet(create_l2cap_connection_request_packet(con_handle, WII_CONTROL_PSM, WII_CONTROL_LOCAL_CID));
 }
 
-void open_data_channel()
+void open_data_channel(uint16_t con_handle)
 {
-    post_bt_packet(create_l2cap_connection_request_packet(wii_controller.con_handle, WII_DATA_PSM, WII_DATA_LOCAL_CID));
+    post_bt_packet(create_l2cap_connection_request_packet(con_handle, WII_DATA_PSM, WII_DATA_LOCAL_CID));
 }
 
-void post_hid_report_packet(uint8_t* report, uint16_t report_size)
+void post_hid_report_packet(uint16_t con_handle, uint8_t* report, uint16_t report_size)
 {
     printf("send hid report \"");
     for (int i = 0; i < report_size; i++)
@@ -908,13 +925,13 @@ void post_hid_report_packet(uint8_t* report, uint16_t report_size)
     }
     printf("\", %u\n", report_size);
 
-    post_bt_packet(create_l2cap_packet(wii_controller.con_handle, AUTO_L2CAP_SIZE, wii_controller.data_cid, report, report_size));
+    post_bt_packet(create_l2cap_packet(con_handle, AUTO_L2CAP_SIZE, wii_controller.data_cid, report, report_size));
 }
 
 int sdp_packet_index = -1;
 int sdp_fragment_index = 0;
 
-void post_sdp_packet(uint16_t l2cap_size, uint8_t* data, uint16_t data_size)
+void post_sdp_packet(uint16_t con_handle, uint16_t l2cap_size, uint8_t* data, uint16_t data_size)
 {
     sdp_packet_index++;
     sdp_fragment_index = 0;
@@ -926,10 +943,10 @@ void post_sdp_packet(uint16_t l2cap_size, uint8_t* data, uint16_t data_size)
     }
     printf("\", %u\n", data_size);
 
-    post_bt_packet(create_l2cap_packet(wii_controller.con_handle, l2cap_size, wii_controller.sdp_cid, data, data_size));
+    post_bt_packet(create_l2cap_packet(con_handle, l2cap_size, wii_controller.sdp_cid, data, data_size));
 }
 
-void post_sdp_packet_fragment(uint8_t* data, uint16_t data_size)
+void post_sdp_packet_fragment(uint16_t con_handle, uint8_t* data, uint16_t data_size)
 {
     sdp_fragment_index++;
 
@@ -940,7 +957,7 @@ void post_sdp_packet_fragment(uint8_t* data, uint16_t data_size)
     }
     printf("\", %u\n", data_size);
 
-    post_bt_packet(create_acl_packet(wii_controller.con_handle, wii_controller.sdp_cid, L2CAP_PB_FRAGMENT, L2CAP_BROADCAST_NONE, data, data_size));
+    post_bt_packet(create_acl_packet(con_handle, wii_controller.sdp_cid, L2CAP_PB_FRAGMENT, L2CAP_BROADCAST_NONE, data, data_size));
 }
 
 void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu)

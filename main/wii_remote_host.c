@@ -2,16 +2,9 @@
 
 //void handle_wii_remote_XXX(uint8_t* packet, uint16_t size)
 
-#ifdef WII_REMOTE_TEST
-
-typedef struct _FOUND_DEVICE
-{
-    bd_addr_t addr;
-    struct _FOUND_DEVICE* next;
-} FOUND_DEVICE;
+#ifdef WII_REMOTE_HOST
 
 bool found_wii_remote;
-FOUND_DEVICE* found_devices;
 bd_addr_t wii_remote_addr;
 SemaphoreHandle_t hid_sem;
 uint8_t hid_wait;
@@ -35,6 +28,8 @@ void find_wii_remote()
 
 void handle_wii_remote_inquiry_result(uint8_t* packet, uint16_t size)
 {
+    static DISCOVERED_DEVICE* discovered_devices;
+
     uint8_t num_responses = packet[3];
     uint8_t* p = packet + 4;
     for (int i = 0; i < num_responses; i++)
@@ -46,9 +41,9 @@ void handle_wii_remote_inquiry_result(uint8_t* packet, uint16_t size)
         uint32_t cod = read_uint24(p + 9);
         uint16_t clock_offset = read_uint16_be(p + 12) & 0x7fff;
 
-        if (found_devices != NULL)
+        if (discovered_devices != NULL)
         {
-            FOUND_DEVICE* fd = found_devices;
+            DISCOVERED_DEVICE* fd = discovered_devices;
             if (memcmp(addr, fd->addr, BDA_SIZE) == 0)
             {
                 continue;
@@ -59,20 +54,20 @@ void handle_wii_remote_inquiry_result(uint8_t* packet, uint16_t size)
 
         post_bt_packet(create_hci_remote_name_request_packet(addr, psrm, true, clock_offset));
 
-        if (found_devices == NULL)
+        if (discovered_devices == NULL)
         {
-            found_devices = malloc(sizeof(FOUND_DEVICE));
-            memcpy(found_devices->addr, addr, BDA_SIZE);
-            found_devices->next = NULL;
+            discovered_devices = malloc(sizeof(DISCOVERED_DEVICE));
+            memcpy(discovered_devices->addr, addr, BDA_SIZE);
+            discovered_devices->next = NULL;
         }
         else
         {
-            FOUND_DEVICE* fd = found_devices;
+            DISCOVERED_DEVICE* fd = discovered_devices;
             while (fd->next != NULL)
             {
                 fd = fd->next;
             }
-            fd->next = malloc(sizeof(FOUND_DEVICE));
+            fd->next = malloc(sizeof(DISCOVERED_DEVICE));
             memcpy(fd->next->addr, addr, BDA_SIZE);
             fd->next->next = NULL;
         }
@@ -567,7 +562,7 @@ void wii_remote_packet_handler(uint8_t* packet, uint16_t size)
     }
 }
 
-void wii_remote_test()
+void wii_remote_host()
 {
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE));
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));

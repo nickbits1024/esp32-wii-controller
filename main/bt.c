@@ -105,9 +105,60 @@ BT_PACKET_ENVELOPE* create_hci_cmd_packet(uint16_t op_code, uint8_t params_size)
     return env;
 }
 
+BT_PACKET_ENVELOPE* create_hci_set_controller_to_host_flow_control_packet(uint8_t flow_control_enable)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_SET_CONTROLLER_TO_HOST_FLOW_CONTROL, PARAMS_SIZE(HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL_PACKET));
+    HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL_PACKET* packet = (HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL_PACKET*)env->packet;
+
+    packet->flow_control_enable = flow_control_enable;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_host_buffer_size_packet(uint16_t host_acl_data_packet_length, uint8_t host_synchronous_data_packet_length, uint16_t host_total_num_acl_data_packets, uint16_t host_total_num_synchronous_data_packets)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_HOST_BUFFER_SIZE, PARAMS_SIZE(HCI_HOST_BUFFER_SIZE_PACKET));
+    HCI_HOST_BUFFER_SIZE_PACKET* packet = (HCI_HOST_BUFFER_SIZE_PACKET*)env->packet;
+
+    packet->host_acl_data_packet_length = host_acl_data_packet_length;
+    packet->host_synchronous_data_packet_length = host_synchronous_data_packet_length;
+    packet->host_total_num_acl_data_packets = host_total_num_acl_data_packets;
+    packet->host_total_num_synchronous_data_packets = host_total_num_synchronous_data_packets;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_host_number_of_completed_packets_packet(uint8_t number_of_handles, uint16_t* connection_handles, uint16_t* host_num_of_completed_packets)
+{
+    uint16_t data_size = number_of_handles * 4;
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_HOST_NUMBER_OF_COMPLETED_PACKETS, PARAMS_SIZE(HCI_HOST_NUMBER_OF_COMPLETED_PACKETS_PACKET) + data_size);
+    HCI_HOST_NUMBER_OF_COMPLETED_PACKETS_PACKET* packet = (HCI_HOST_NUMBER_OF_COMPLETED_PACKETS_PACKET*)env->packet;
+
+    packet->number_of_handles = number_of_handles;
+    uint16_t* p = (uint16_t*)packet->data;
+    for (int i = 0; i < number_of_handles; i++)
+    {
+        *p = connection_handles[i];
+        p++;
+    }
+    for (int i = 0; i < number_of_handles; i++)
+    {
+        *p = host_num_of_completed_packets[i];
+        p++;
+    }
+
+    return env;
+
+}
+
 BT_PACKET_ENVELOPE* create_hci_reset_packet()
 {
     return create_hci_cmd_packet(HCI_OPCODE_RESET, 0);
+}
+
+BT_PACKET_ENVELOPE* create_hci_inquiry_cancel_packet()
+{
+    return create_hci_cmd_packet(HCI_OPCODE_INQUIRY_CANCEL, 0);
 }
 
 BT_PACKET_ENVELOPE* create_hci_read_buffer_size_packet()
@@ -233,6 +284,16 @@ BT_PACKET_ENVELOPE* create_hci_write_authentication_enable(uint8_t enable)
     HCI_WRITE_AUTHENTICATION_ENABLE_PACKET* packet = (HCI_WRITE_AUTHENTICATION_ENABLE_PACKET*)env->packet;
 
     packet->authentication_enable = enable;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_write_encryption_mode(uint8_t encryption_mode)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_ENCRYPTION_MODE, PARAMS_SIZE(HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET));
+    HCI_WRITE_ENCRYPTION_MODE_PACKET* packet = (HCI_WRITE_ENCRYPTION_MODE_PACKET*)env->packet;
+
+    packet->encryption_mode = encryption_mode;
 
     return env;
 }
