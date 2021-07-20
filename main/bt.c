@@ -201,9 +201,20 @@ BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, ui
     memcpy(packet->addr, addr, BDA_SIZE);
     packet->packet_type = packet_type;
     packet->psrm = psrm;
-    packet->reserved = 0x00,
-        write_uint16_be((uint8_t*)&packet->clock_offset, (clock_offset_valid ? 0x8000 : 0) | clock_offset);
+    packet->reserved = 0;
+    write_uint16_be((uint8_t*)&packet->clock_offset, (clock_offset_valid ? 0x8000 : 0) | clock_offset);
     packet->allow_role_switch = allow_role_switch;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_switch_role_packet(const bd_addr_t addr, uint8_t role)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_SWITCH_ROLE_COMMAND, PARAMS_SIZE(HCI_SWITCH_ROLE_PACKET));
+    HCI_SWITCH_ROLE_PACKET* packet = (HCI_SWITCH_ROLE_PACKET*)env->packet;
+
+    memcpy(packet->addr, addr, BDA_SIZE);
+    packet->role = role;
 
     return env;
 }
@@ -421,7 +432,7 @@ BT_PACKET_ENVELOPE* create_hci_write_local_name(char* local_name)
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, uint8_t* data, uint16_t data_size)
+BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, const uint8_t* data, uint16_t data_size)
 {
     BT_PACKET_ENVELOPE* env = create_packet_envelope(sizeof(HCI_ACL_PACKET) + data_size);
 
@@ -454,13 +465,13 @@ BT_PACKET_ENVELOPE* create_l2cap_base_packet(uint16_t packet_size, uint16_t con_
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t l2cap_size, uint16_t channel, uint8_t* data, uint16_t data_size)
+BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t l2cap_size, uint16_t channel, const uint8_t* data, uint16_t data_size)
 {
     uint16_t size = sizeof(L2CAP_PACKET) + data_size;
 
     BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, channel);
     L2CAP_PACKET* packet = (L2CAP_PACKET*)env->packet;
-    if (l2cap_size != AUTO_L2CAP_SIZE)
+    if (l2cap_size != L2CAP_AUTO_SIZE)
     {
         packet->l2cap_size = l2cap_size;
     }
@@ -577,7 +588,7 @@ BT_PACKET_ENVELOPE* create_l2cap_disconnection_response_packet(uint16_t con_hand
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_output_report_packet(uint16_t con_handle, uint16_t channel, uint8_t* report, uint16_t report_size)
+BT_PACKET_ENVELOPE* create_output_report_packet(uint16_t con_handle, uint16_t channel, const uint8_t* report, uint16_t report_size)
 {
     uint16_t size = sizeof(L2CAP_PACKET) + report_size;
     BT_PACKET_ENVELOPE* env = create_l2cap_base_packet(size, con_handle, channel);

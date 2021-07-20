@@ -243,7 +243,7 @@ void wii_mitm_packet_handler(uint8_t* packet, uint16_t size)
                 case HCI_EVENT_PIN_CODE_REQUEST:
                     handle_wii_mitm_pin_code_request((HCI_PIN_CODE_REQUEST_EVENT_PACKET*)packet);
                     break;
-                // case HCI_EVENT_LINK_KEY_REQUEST:
+                // case HCI_EVENT_LINbK_KEY_REQUEST:
                 //     handle_wii_mitm_link_key_request((HCI_LINK_KEY_REQUEST_EVENT_PACKET*)packet);
                 //     break;
                 // case HCI_EVENT_AUTHENTICATION_COMPLETE:

@@ -11,9 +11,10 @@
 #include "esp_system.h"
 #include "esp_spi_flash.h"
 #include "esp_bt.h"
+#include "esp_int_wdt.h"
 
 //#define WII_REMOTE_HOST
-#define WII_MITM
+//#define WII_MITM
 
 #include "bt.h"
 #include "wii_bt.h"
@@ -34,15 +35,12 @@ void find_wii_remote();
 
 void open_control_channel(uint16_t con_handle);
 void open_data_channel(uint16_t con_handle);
-void post_hid_report_packet(uint16_t con_handle, uint8_t* hid_report, uint16_t report_size);
+void post_hid_report_packet(uint16_t con_handle, const uint8_t* hid_report, uint16_t report_size);
 void post_sdp_packet(uint16_t con_handle, uint16_t l2cap_size, uint8_t* data, uint16_t data_size);
 void post_sdp_packet_fragment(uint16_t con_handle, uint8_t* data, uint16_t data_size);
 void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu);
 void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
-
-#define OUTPUT 1
-#define INPUT 2
 
 #define HOST_ACL_BUFFER_SIZE         0xffff
 #define HOST_NUM_ACL_BUFFERS         5
@@ -53,9 +51,9 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 #define SDP_PSM                     0x01
 #define WII_CONTROL_PSM             0x11
 #define WII_DATA_PSM                0x13
-#define SDP_LOCAL_CID               0x101
-#define WII_CONTROL_LOCAL_CID       0x111
-#define WII_DATA_LOCAL_CID          0x113
+#define SDP_LOCAL_CID               0x40
+#define WII_CONTROL_LOCAL_CID       0x41
+#define WII_DATA_LOCAL_CID          0x42
 #define LINK_KEY_BLOB_NAME          "link_key"
 
 #define WII_SDP_MTU                 256
@@ -101,8 +99,15 @@ typedef enum
     WII_CONSOLE_PAIRING_PENDING = 1,
     WII_CONSOLE_PAIRING_STARTED,
     WII_CONSOLE_PAIRING_COMPLETE,
+    WII_CONSOLE_POWER_ON_PENDING,
+    WII_CONSOLE_POWER_ON_CONNECTED,
     WII_CONSOLE_POWER_OFF_PENDING,
     WII_CONSOLE_POWER_OFF_CONNECTED,
+    WII_CONSOLE_POWER_OFF_CONTROL_OPENING,
+    WII_CONSOLE_POWER_OFF_DATA_OPENING,
+    WII_CONSOLE_POWER_OFF_DATA_TRANSFER,
+    WII_CONSOLE_POWER_OFF_DISCONNECTING,
+    WII_REMOTE_CONNECTION_PENDING,
     WII_REMOTE_PAIRING_PENDING,
     WII_REMOTE_PAIRING_STARTED,
     WII_REMOTE_PAIRING_COMPLETE,

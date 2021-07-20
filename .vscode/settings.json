@@ -31,7 +31,10 @@
         "endian.h": "c",
         "task.h": "c",
         "*.ipp": "c",
-        "semphr.h": "c"
+        "semphr.h": "c",
+        "esp_int_wdt.h": "c",
+        "future": "c",
+        "system_error": "c"
     },
     "idf.flashType": "UART",
     "idf.portWin": "COM3"

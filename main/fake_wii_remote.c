@@ -28,7 +28,7 @@ void handle_fake_wii_remote_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACK
 void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* packet)
 {
     printf("connection complete addr %s status 0x%02x con_handle 0x%x, link_type %u encrypted %u\n", bda_to_string(packet->addr), packet->status, packet->con_handle, packet->link_type, packet->encryption_enabled);
-    if (1 || packet->status == ERROR_CODE_SUCCESS)
+    if (packet->status == ERROR_CODE_SUCCESS)
     {
         wii_controller.wii_con_handle = packet->con_handle;
         switch (wii_controller.state)
@@ -49,6 +49,12 @@ void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PA
                 //open_data_channel();
                 post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
                 break;
+            case WII_CONSOLE_POWER_ON_PENDING:
+                //open_control_channel(packet->con_handle);
+                wii_controller.state = WII_CONSOLE_POWER_ON_CONNECTED;
+                //post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
+                post_bt_packet(create_hci_set_connection_encryption(packet->con_handle, 1));
+
             default:
                 break;
         }
@@ -81,7 +87,10 @@ void handle_fake_wii_remote_link_key_request(HCI_LINK_KEY_REQUEST_EVENT_PACKET* 
             printf("rejecting link key request from %s...\n", bda_to_string(packet->addr));
             post_bt_packet(create_hci_link_key_request_negative_packet(packet->addr));
             break;
+        case WII_CONSOLE_POWER_ON_PENDING:
         case WII_CONSOLE_POWER_OFF_PENDING:
+        case WII_CONSOLE_POWER_ON_CONNECTED:
+        case WII_CONSOLE_POWER_OFF_CONNECTED:
         {
             uint8_t link_key[HCI_LINK_KEY_SIZE];
             size_t size = HCI_LINK_KEY_SIZE;
@@ -136,21 +145,48 @@ void handle_fake_wii_remote_authentication_complete(HCI_AUTHENTICATION_COMPLETE_
 {
     printf("auth complete con_handle 0x%x status 0x%x\n", packet->con_handle, packet->status);
 
-    if (wii_controller.state == WII_CONSOLE_PAIRING_STARTED)
+    switch (wii_controller.state)
     {
-        wii_controller.state = packet->status == ERROR_CODE_SUCCESS ? WII_CONSOLE_PAIRING_COMPLETE : 0;
+        case WII_CONSOLE_PAIRING_STARTED:
+            wii_controller.state = packet->status == ERROR_CODE_SUCCESS ? WII_CONSOLE_PAIRING_COMPLETE : 0;
 
-        if (packet->status == ERROR_CODE_SUCCESS)
-        {
-            //open_wii_remote_data_channel(packet->con_handle);
-            printf("storing wii address %s\n", bda_to_string(wii_addr));
-            nvs_set_blob(wii_controller.nvs_handle, WII_ADDR_BLOB_NAME, wii_addr, BDA_SIZE);
+            if (packet->status == ERROR_CODE_SUCCESS)
+            {
+                //open_wii_remote_data_channel(packet->con_handle);
+                printf("storing wii address %s\n", bda_to_string(wii_addr));
+                nvs_set_blob(wii_controller.nvs_handle, WII_ADDR_BLOB_NAME, wii_addr, BDA_SIZE);
 
-            //post_bt_packet(create_hci_set_connection_encryption(packet->con_handle, 1));
-            //send_power_off_disconnect(wii_controller.con_handle);
-        }
+                //post_bt_packet(create_hci_set_connection_encryption(packet->con_handle, 1));
+                //send_power_off_disconnect(wii_controller.con_handle);
+            }
+            break;
+        case WII_CONSOLE_POWER_ON_CONNECTED:
+        case WII_CONSOLE_POWER_OFF_CONNECTED:
+            wii_controller.state = WII_CONSOLE_POWER_OFF_CONTROL_OPENING;
+            //post_bt_packet(create_hci_remote_name_request_packet(wii_addr, 1, false, 0));
+
+            //open_data_channel(wii_controller.wii_con_handle);
+            break;
+        default:
+            break;
     }
 }
+
+void handle_fake_wii_remote_role_change(HCI_ROLE_CHANGE_EVENT_PACKET* packet)
+{
+    // switch (wii_controller.state)
+    // {
+    //     case WII_CONSOLE_POWER_ON_CONNECTED:
+    //     case WII_CONSOLE_POWER_OFF_CONNECTED:
+    //         open_control_channel(wii_controller.wii_con_handle);
+    //         open_data_channel(wii_controller.wii_con_handle);
+    //         //post_l2ap_config_mtu_request(packet->con_handle, packet->dest_cid, WII_REMOTE_MTU);
+    //         break;
+    //     default:
+    //         break;
+    // }
+}
+
 
 void handle_fake_wii_remote_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PACKET* packet)
 {
@@ -204,17 +240,24 @@ void handle_fake_wii_remote_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_
     //printf("l2cap conn response con_handle 0x%x dest_cid 0x%x source_cid 0x%x result 0x%x status 0x%x\n",
     //    response_packet->con_handle, response_packet->dest_cid, response_packet->source_cid, response_packet->result, response_packet->status);
 
-    if (wii_controller.state == WII_CONSOLE_POWER_OFF_CONNECTED)
-    {
-        if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_RESULT_SUCCESS)
-        {
-            post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->dest_cid, WII_REMOTE_MTU);
-        }
-    }
-
     if (response_packet->status == ERROR_CODE_SUCCESS && response_packet->result == L2CAP_CONNECTION_RESULT_SUCCESS)
     {
-        wii_controller.con_handle = response_packet->con_handle;
+        wii_controller.wii_con_handle = response_packet->con_handle;
+
+        switch (wii_controller.state)
+        {
+            case WII_CONSOLE_POWER_OFF_CONTROL_OPENING:
+            case WII_CONSOLE_POWER_OFF_DATA_OPENING:
+                //wii_controller.state = WII_CONSOLE_DISCONNECT_PENDING;
+                post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->dest_cid, WII_REMOTE_MTU);
+                break;
+            case WII_CONSOLE_POWER_ON_CONNECTED:
+                //post_l2ap_config_mtu_request(response_packet->con_handle, response_packet->dest_cid, WII_REMOTE_MTU);
+                break;
+            default:
+                break;
+        }
+
         switch (response_packet->source_cid)
         {
             case WII_CONTROL_LOCAL_CID:
@@ -266,30 +309,30 @@ void handle_fake_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* re
 
     post_bt_packet(env);
 
-    uint8_t* option = request_packet->options;
-    for (int i = 0; i < options_size; )
-    {
-        uint8_t option_type = option[0];
-        uint8_t option_payload_size = option[1];
-        uint8_t option_size = sizeof(L2CAP_CONFIG_OPTION) + option_payload_size;
+    // uint8_t* option = request_packet->options;
+    // for (int i = 0; i < options_size; )
+    // {
+    //     uint8_t option_type = option[0];
+    //     uint8_t option_payload_size = option[1];
+    //     uint8_t option_size = sizeof(L2CAP_CONFIG_OPTION) + option_payload_size;
 
-        switch (option_type)
-        {
-            case L2CAP_CONFIG_MTU_OPTION_TYPE:
-            {
-                L2CAP_CONFIG_MTU_OPTION* mtu_option = (L2CAP_CONFIG_MTU_OPTION*)option;
-                if (mtu_option->mtu != WII_REMOTE_MTU)
-                {
-                    post_l2ap_config_mtu_request(request_packet->con_handle, cid, WII_REMOTE_MTU);
-                    i = options_size; // exit loop
-                }
-                break;
-            }
-        }
+    //     switch (option_type)
+    //     {
+    //         case L2CAP_CONFIG_MTU_OPTION_TYPE:
+    //         {
+    //             L2CAP_CONFIG_MTU_OPTION* mtu_option = (L2CAP_CONFIG_MTU_OPTION*)option;
+    //             if (mtu_option->mtu != WII_REMOTE_MTU)
+    //             {
+    //                 post_l2ap_config_mtu_request(request_packet->con_handle, cid, WII_REMOTE_MTU);
+    //                 i = options_size; // exit loop
+    //             }
+    //             break;
+    //         }
+    //     }
 
-        i += option_size;
-        option += option_size;
-    }
+    //     i += option_size;
+    //     option += option_size;
+    // }
 }
 
 void handle_fake_wii_remote_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packet)
@@ -312,6 +355,24 @@ void handle_fake_wii_remote_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* 
         post_bt_packet(create_hci_qos_setup_packet(packet->con_handle, 0, HCI_QOS_BEST_EFFORT, WII_REMOTE_QOS_TOKEN_RATE, WII_REMOTE_QOS_PEAK_BANDWIDTH, WII_REMOTE_QOS_LATENCY, WII_REMOTE_QOS_DELAY_VARIATION));
     }
 
+    switch (wii_controller.state)
+    {
+        case WII_CONSOLE_POWER_ON_CONNECTED:
+            post_hid_report_packet(packet->con_handle, (uint8_t*)"\xa1\x30\x00\x00", 4);
+            //send_disconnect(packet->con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION);
+            break;
+        case WII_CONSOLE_POWER_OFF_CONTROL_OPENING:
+            wii_controller.state = WII_CONSOLE_POWER_OFF_DATA_OPENING;
+            open_data_channel(packet->con_handle);
+            break;
+        case WII_CONSOLE_POWER_OFF_DATA_OPENING:
+            wii_controller.state = WII_CONSOLE_POWER_OFF_DATA_TRANSFER;
+            post_hid_report_packet(packet->con_handle, (uint8_t*)"\xa1\x30\x00\x00", 4);
+            break;
+        default:
+            break;
+    }
+
 }
 
 void handle_fake_wii_remote_l2cap_disconnection_request(L2CAP_DISCONNECTION_REQUEST_PACKET* packet)
@@ -320,6 +381,18 @@ void handle_fake_wii_remote_l2cap_disconnection_request(L2CAP_DISCONNECTION_REQU
 
     post_bt_packet(create_l2cap_disconnection_response_packet(packet->con_handle, packet->identifier, packet->dest_cid, packet->source_cid));
     //post_bt_packet(create_hci_disconnect_packet(packet->con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION));
+}
+
+void handle_fake_wii_remote_l2cap_disconnection_response(L2CAP_DISCONNECTION_RESPONSE_PACKET* packet)
+{
+    switch (wii_controller.state)
+    {
+        case WII_CONSOLE_POWER_OFF_DISCONNECTING:
+            send_power_off_disconnect(packet->con_handle);
+            break;
+        default:
+            break;
+    }
 }
 
 void handle_fake_wii_remote_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
@@ -338,11 +411,14 @@ void handle_fake_wii_remote_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* pa
         case L2CAP_CONFIG_RESPONSE:
             handle_fake_wii_remote_l2cap_config_response((L2CAP_CONFIG_RESPONSE_PACKET*)packet);
             break;
-            // case L2CAP_COMMAND_REJECT:
-            //     handle_wii_remote_l2cap_command_reject((L2CAP_COMMAND_REJECT_PACKET*)packet);
-            //     break;
+        case L2CAP_COMMAND_REJECT:
+            //handle_wii_remote_l2cap_command_reject((L2CAP_COMMAND_REJECT_PACKET*)packet);
+            break;
         case L2CAP_DISCONNECTION_REQUEST:
             handle_fake_wii_remote_l2cap_disconnection_request((L2CAP_DISCONNECTION_REQUEST_PACKET*)packet);
+            break;
+        case L2CAP_DISCONNECTION_RESPONSE:
+            handle_fake_wii_remote_l2cap_disconnection_response((L2CAP_DISCONNECTION_RESPONSE_PACKET*)packet);
             break;
         default:
             printf("unhandled signal channel code 0x%02x\n", packet->code);
@@ -405,13 +481,13 @@ void handle_fake_wii_remote_sdp_channel(L2CAP_PACKET* packet)
                 }
             }
 
-            post_sdp_packet(l2cap_size, (uint8_t*)rr->response, rr->response_size);
+            post_sdp_packet(wii_controller.wii_con_handle, l2cap_size, (uint8_t*)rr->response, rr->response_size);
             for (int j = i + 1; j < request_responses_size; j++)
             {
                 const REQUEST_RESPONSE* rr2 = &sdp_request_responses[j];
                 if (rr2->request_size == 0 && rr2->request == NULL && rr2->response_size > 0)
                 {
-                    post_sdp_packet_fragment((uint8_t*)rr2->response, rr2->response_size);
+                    post_sdp_packet_fragment(wii_controller.wii_con_handle, (uint8_t*)rr2->response, rr2->response_size);
                 }
                 else
                 {
@@ -422,7 +498,7 @@ void handle_fake_wii_remote_sdp_channel(L2CAP_PACKET* packet)
         }
     }
 
-    printf("no sdp response request post_sdp_packet(AUTO_L2CAP_SIZE, (uint8_t*)\"");
+    printf("no sdp response request post_sdp_packet(L2CAP_AUTO_SIZE, (uint8_t*)\"");
     for (int i = 0; i < packet->l2cap_size; i++)
     {
         printf("\\x%02x", packet->data[i]);
@@ -473,7 +549,7 @@ REQUEST_RESPONSE hid_request_responses[] =
 };
 
 void post_hid_request_reponse(HID_REPORT_PACKET* packet, uint16_t size)
-{    
+{
     // send_disconnect(wii_controller.con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION);
     // return;
 
@@ -485,13 +561,13 @@ void post_hid_request_reponse(HID_REPORT_PACKET* packet, uint16_t size)
         const REQUEST_RESPONSE* rr = &hid_request_responses[i];
         if (size == rr->request_size && memcmp(p, rr->request, size) == 0)
         {
-            post_hid_report_packet((uint8_t*)rr->response, rr->response_size);
+            post_hid_report_packet(L2CAP_AUTO_SIZE, (uint8_t*)rr->response, rr->response_size);
             for (int j = i + 1; j < request_responses_size; j++)
             {
                 const REQUEST_RESPONSE* rr2 = &hid_request_responses[j];
                 if (rr2->request_size == 0 && rr2->request == NULL && rr2->response_size > 0)
                 {
-                    post_hid_report_packet((uint8_t*)rr2->response, rr2->response_size);   
+                    post_hid_report_packet(L2CAP_AUTO_SIZE, (uint8_t*)rr2->response, rr2->response_size);
                 }
                 else
                 {
@@ -511,11 +587,11 @@ void post_hid_request_reponse(HID_REPORT_PACKET* packet, uint16_t size)
 
     if (size == 23 && p[1] == 0x16)
     {
-        post_hid_report_packet((uint8_t*)"\xa1\x22\x00\x00\x16\x00", 6);
+        post_hid_report_packet(wii_controller.wii_con_handle, (uint8_t*)"\xa1\x22\x00\x00\x16\x00", 6);
     }
     else
     {
-        send_power_off_disconnect(wii_controller.con_handle);
+        send_power_off_disconnect(wii_controller.wii_con_handle);
     }
 }
 
@@ -528,11 +604,11 @@ void continous_reporting_task(void* p)
     {
         if (data_report_id == 0x30)
         {
-            post_bt_packet(create_output_report_packet(wii_controller.con_handle, wii_controller.data_cid, (uint8_t*)"\xa1\x30\x00\x00", 4));
+            post_bt_packet(create_output_report_packet(wii_controller.wii_con_handle, wii_controller.data_cid, (uint8_t*)"\xa1\x30\x00\x00", 4));
         }
         else if (data_report_id == 0x33)
         {
-            post_bt_packet(create_output_report_packet(wii_controller.con_handle, wii_controller.data_cid, (uint8_t*)"\xa1\x33\x40\x00\x7f\x81\x9c\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", 19));
+            post_bt_packet(create_output_report_packet(wii_controller.wii_con_handle, wii_controller.data_cid, (uint8_t*)"\xa1\x33\x40\x00\x7f\x81\x9c\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", 19));
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
@@ -592,6 +668,21 @@ void handle_fake_wii_remote_data_channel(HID_REPORT_PACKET* packet, uint16_t siz
             printf("unhandled HID report type 0x%x\n", packet->report_type);
             break;
     }
+
+    switch (wii_controller.state)
+    {
+        case WII_CONSOLE_POWER_OFF_DATA_TRANSFER:
+            wii_controller.state = WII_CONSOLE_POWER_OFF_DISCONNECTING;
+            post_bt_packet(create_l2cap_disconnection_request_packet(wii_controller.wii_con_handle, wii_controller.data_cid, WII_DATA_LOCAL_CID));
+            break;
+        default:
+            break;
+    }
+}
+
+void handle_fake_wii_write_encryption_mode_complete(HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET* packet)
+{
+    open_control_channel(wii_controller.wii_con_handle);
 }
 
 
@@ -621,6 +712,12 @@ void fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
                     break;
                 case HCI_EVENT_AUTHENTICATION_COMPLETE:
                     handle_fake_wii_remote_authentication_complete((HCI_AUTHENTICATION_COMPLETE_EVENT_PACKET*)packet);
+                    break;
+                case HCI_EVENT_ROLE_CHANGE:
+                    handle_fake_wii_remote_role_change((HCI_ROLE_CHANGE_EVENT_PACKET*)packet);
+                    break;
+                case HCI_EVENT_ENCRYPTION_CHANGE:
+                    handle_fake_wii_write_encryption_mode_complete((HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET*)packet);
                     break;
                 default:
                     break;
@@ -672,21 +769,34 @@ void send_disconnect(uint16_t con_handle, uint8_t reason)
 void connect_and_power_off()
 {
     wii_controller.state = WII_CONSOLE_POWER_OFF_PENDING;
-    //post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x334, 1, false, 0, 1));
-    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x18, 0, false, 2, 1));
+    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x3316, 0, false, 0, 1));
 }
+
+void connect_and_power_on()
+{
+    wii_controller.state = WII_CONSOLE_POWER_ON_PENDING;
+    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x08, 0, false, 0, 1));
+    //post_bt_packet(create_hci_switch_role_packet(wii_addr, HCI_ROLE_SLAVE));
+    //post_bt_packet(create_hci_
+}
+
 
 void fake_wii_remote()
 {
-    post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH | HCI_LINK_POLICY_ENABLE_SNIFF_MODE | HCI_LINK_POLICY_ENABLE_HOLD_MODE));
+    //post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH | HCI_LINK_POLICY_ENABLE_SNIFF_MODE | HCI_LINK_POLICY_ENABLE_HOLD_MODE));
     //post_bt_packet(create_hci_secure_connections_host_support_packet(1));
+    post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH));
     post_bt_packet(create_hci_write_class_of_device_packet(WII_REMOTE_COD));
     post_bt_packet(create_hci_write_local_name(WII_REMOTE_NAME));
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
+
+    post_bt_packet(create_hci_host_buffer_size_packet(HOST_ACL_BUFFER_SIZE, HOST_SCO_BUFFER_SIZE, HOST_NUM_ACL_BUFFERS, HOST_NUM_SCO_BUFFERS));
+    post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
+
     //post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE));
     //post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
-    //post_bt_packet(create_hci_write_authentication_enable(1));
+    post_bt_packet(create_hci_write_authentication_enable(1));
     //post_bt_packet(create_hci_write_encryption_mode(1));
 
     size_t size = BDA_SIZE;
@@ -694,7 +804,8 @@ void fake_wii_remote()
     if (ret == ESP_OK && size == BDA_SIZE)
     {
         printf("stored wii at %s\n", bda_to_string(wii_addr));
-        connect_and_power_off();
+        //connect_and_power_off();
+        connect_and_power_on();
     }
     else
     {
