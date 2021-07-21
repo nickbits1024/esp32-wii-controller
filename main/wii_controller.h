@@ -14,7 +14,7 @@
 #include "esp_int_wdt.h"
 
 //#define WII_REMOTE_HOST
-//#define WII_MITM
+#define WII_MITM
 
 #include "bt.h"
 #include "wii_bt.h"
@@ -23,6 +23,7 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size);
 void wii_controller_init();
 int queue_packet_handler(uint8_t* packet, uint16_t size);
 
+void wii_controller_packet_handler(uint8_t* packet, uint16_t size);
 void wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 void fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size);
 void wii_mitm_packet_handler(uint8_t* packet, uint16_t size);
@@ -43,9 +44,9 @@ void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t re
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
 #define HOST_ACL_BUFFER_SIZE         0xffff
-#define HOST_NUM_ACL_BUFFERS         5
+#define HOST_NUM_ACL_BUFFERS         6
 #define HOST_SCO_BUFFER_SIZE         0xff
-#define HOST_NUM_SCO_BUFFERS         5
+#define HOST_NUM_SCO_BUFFERS         1
 
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
 #define SDP_PSM                     0x01
@@ -167,6 +168,6 @@ typedef struct _FOUND_DEVICE
 } DISCOVERED_DEVICE;
 
 extern WII_CONTROLLER wii_controller;
-
+extern xSemaphoreHandle all_controller_buffers_sem;
 
 //extern portMUX_TYPE dump_mux;

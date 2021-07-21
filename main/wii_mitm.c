@@ -164,6 +164,27 @@ void wii_mitm_map_connections(BT_PACKET_ENVELOPE* env)
     }
 }
 
+// void send_acl_packet(BT_PACKET_ENVELOPE* env)
+// {
+//     xSemaphoreTake(all_controller_buffers_sem, portMAX_DELAY);
+//     dump_packet(OUTPUT_PACKET, env->packet, env->size);
+
+//     while (!esp_vhci_host_check_send_available());
+//     esp_vhci_host_send_packet(env->packet, env->size);
+
+//     HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)env->packet;
+
+//     uint16_t con_handles[1] = { acl_packet->con_handle };
+//     uint16_t num_complete[1] = { 1 };
+//     BT_PACKET_ENVELOPE* hncp_env = create_hci_host_number_of_completed_packets_packet(1, con_handles, num_complete);
+
+//     while (!esp_vhci_host_check_send_available());
+//     esp_vhci_host_send_packet(hncp_env->packet, hncp_env->size);
+
+//     free(hncp_env);
+//     free(env);
+// }
+
 void wii_mitm_flush_queue()
 {
     BT_PACKET_ENVELOPE* env;
@@ -172,6 +193,7 @@ void wii_mitm_flush_queue()
     {
         wii_mitm_map_connections(env);
         post_bt_packet(env);
+        //send_acl_packet(env);
     }
 }
 
@@ -188,6 +210,7 @@ void wii_mitm_transfer_packet(uint8_t* packet, uint16_t size)
 
         wii_mitm_map_connections(env);
         post_bt_packet(env);
+        //send_acl_packet(env);
     }
     else
     {
@@ -265,7 +288,11 @@ void wii_mitm()
 {
     post_bt_packet(create_hci_write_class_of_device_packet(WII_REMOTE_COD));
     post_bt_packet(create_hci_write_local_name(WII_REMOTE_NAME));
-    post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH));
+    post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH | 
+                                                                        HCI_LINK_POLICY_ENABLE_SNIFF_MODE | 
+                                                                        HCI_LINK_POLICY_ENABLE_SNIFF_MODE | 
+                                                                        HCI_LINK_POLICY_ENABLE_HOLD_MODE |
+                                                                        HCI_LINK_POLICY_ENABLE_PARK_STATE));
     post_bt_packet(create_hci_secure_connections_host_support_packet(1));
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));

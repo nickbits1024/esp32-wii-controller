@@ -333,6 +333,7 @@
 #define HCI_LINK_POLICY_ENABLE_ROLE_SWITCH                  0x1
 #define HCI_LINK_POLICY_ENABLE_HOLD_MODE                    0x2
 #define HCI_LINK_POLICY_ENABLE_SNIFF_MODE                   0x4
+#define HCI_LINK_POLICY_ENABLE_PARK_STATE                   0x8
 
 #define HCI_MAX_LOCAL_NAME_SIZE         248
 

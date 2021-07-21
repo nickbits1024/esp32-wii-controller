@@ -9,10 +9,29 @@ xSemaphoreHandle output_queue_ready_sem;
 //xQueueHandle output_queue_handle;
 //xQueueHandle input_queue_handle;
 xQueueHandle queue_handle;
-xSemaphoreHandle controller_buffers_sem;
+xSemaphoreHandle all_controller_buffers_sem;
+xSemaphoreHandle controller_buffers_sem[2];
+int controller_buffers_sem_count[2];
 bd_addr_t device_addr;
 //portMUX_TYPE dump_mux = portMUX_INITIALIZER_UNLOCKED;
 
+void peek_number_of_completed_packets(uint8_t* packet, uint16_t size);
+
+xSemaphoreHandle get_queue_sem(uint16_t con_handle, int add)
+{
+    if (con_handle == wii_controller.wii_con_handle)
+    {
+        controller_buffers_sem_count[0] += add;
+        return controller_buffers_sem[0];
+    }
+    else if (con_handle == wii_controller.wii_remote_con_handle)
+    {
+        controller_buffers_sem_count[1] += add;
+        return controller_buffers_sem[1];
+    }
+    printf("no queue for handle %x\n", con_handle);
+    abort();
+}
 
 void queue_io_task(void* p)
 {
@@ -23,25 +42,42 @@ void queue_io_task(void* p)
 
         if (xQueueReceive(queue_handle, &env, portMAX_DELAY) == pdPASS)
         {
-            dump_packet(env->io_direction, env->packet, env->size);
+            multi_heap_info_t heap_info;
+            heap_caps_get_info(&heap_info, MALLOC_CAP_INTERNAL);
+
+            //dump_packet(env->io_direction, env->packet, env->size);
+
+            HCI_PACKET* hci_packet = (HCI_PACKET*)env->packet;
 
             if (env->io_direction == OUTPUT_PACKET)
             {
-                HCI_PACKET* hci_packet = (HCI_PACKET*)env->packet;
-
                 if (hci_packet->type == HCI_ACL_PACKET_TYPE)
                 {
+                    HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)hci_packet;
                     if (first_acl_send)
                     {
                         xSemaphoreTake(output_queue_ready_sem, portMAX_DELAY);
                         first_acl_send = false;
                     }
-                    xSemaphoreTake(controller_buffers_sem, portMAX_DELAY);
-                    //printf("sending acl...\n");
+                    printf("acl take con_handle 0x%x wii %u wii remote %u free %u alloc %u..\n", acl_packet->con_handle, controller_buffers_sem_count[0], controller_buffers_sem_count[1], heap_info.total_free_bytes, heap_info.total_allocated_bytes);
+                    xSemaphoreTake(get_queue_sem(acl_packet->con_handle, -1), portMAX_DELAY);
+                    //xSemaphoreTake(all_controller_buffers_sem, portMAX_DELAY);
+                    printf("acl taken...\n");
                 }
 
                 while (!esp_vhci_host_check_send_available());
                 esp_vhci_host_send_packet(env->packet, env->size);
+            }
+            else
+            {
+                wii_controller_packet_handler(env->packet, env->size);
+#if defined(WII_REMOTE_HOST)
+                wii_remote_packet_handler(env->packet, env->size);
+#elif defined(WII_MITM)
+                wii_mitm_packet_handler(env->packet, env->size);
+#else
+                fake_wii_remote_packet_handler(env->packet, env->size);
+#endif
 
                 if (hci_packet->type == HCI_ACL_PACKET_TYPE)
                 {
@@ -55,19 +91,13 @@ void queue_io_task(void* p)
                     while (!esp_vhci_host_check_send_available());
                     esp_vhci_host_send_packet(hncp_env->packet, hncp_env->size);
 
+                    //printf("acl sent\n");
+
                     free(hncp_env);
-                    env = NULL;
+                    hncp_env = NULL;
                 }
-            }
-            else
-            {
-#if defined(WII_REMOTE_HOST)
-                wii_remote_packet_handler(env->packet, env->size);
-#elif defined(WII_MITM)
-                wii_mitm_packet_handler(env->packet, env->size);
-#else
-                fake_wii_remote_packet_handler(env->packet, env->size);
-#endif
+
+
             }
 
             free(env);
@@ -80,6 +110,13 @@ void queue_io_task(void* p)
 
 int queue_packet_handler(uint8_t* packet, uint16_t size)
 {
+    HCI_EVENT_PACKET* event_packet = (HCI_EVENT_PACKET*)packet;
+    if (event_packet->type == HCI_EVENT_PACKET_TYPE &&
+        event_packet->event_code == HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS)
+    {
+        peek_number_of_completed_packets(packet, size);
+    }
+
     BT_PACKET_ENVELOPE* env = create_packet_envelope(size);
     env->io_direction = INPUT_PACKET;
     memcpy(env->packet, packet, size);
@@ -453,7 +490,7 @@ const char* get_hci_op_code_name(uint16_t op_code)
     }
 }
 
-void handle_reset_complete(HCI_RESET_COMPLETE_PACKET* packet)
+void dump_reset_complete(HCI_RESET_COMPLETE_PACKET* packet)
 {
     printf("reset complete status 0x%x\n", packet->status);
 }
@@ -461,151 +498,162 @@ void handle_reset_complete(HCI_RESET_COMPLETE_PACKET* packet)
 void handle_read_bd_addr_complete(HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET* packet)
 {
     memcpy(device_addr, packet->addr, BDA_SIZE);
+}
 
+void dump_read_bd_addr_complete(HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET* packet)
+{
     printf("read local address complete, status 0x%x addr %s\n", packet->status, bda_to_string(packet->addr));
+}
+
+void dump_read_buffer_size_complete(HCI_READ_BUFFER_SIZE_COMPLETE_PACKET* packet)
+{
+    printf("buffers status %x HC_ACL_Data_Packet_Length %u HC_Total_Num_ACL_Data_Packets %u\n", packet->status, packet->hc_acl_data_packet_length, packet->hc_total_num_acl_data_packets);
 }
 
 void handle_read_buffer_size_complete(HCI_READ_BUFFER_SIZE_COMPLETE_PACKET* packet)
 {
-    printf("buffers status %x HC_ACL_Data_Packet_Length %u HC_Total_Num_ACL_Data_Packets %u\n", packet->status, packet->hc_acl_data_packet_length, packet->hc_total_num_acl_data_packets);
-
-    if (controller_buffers_sem == NULL)
+    if (all_controller_buffers_sem == NULL)
     {
-        controller_buffers_sem = xSemaphoreCreateCounting(packet->hc_total_num_acl_data_packets, packet->hc_total_num_acl_data_packets);
+        int all_slots = packet->hc_total_num_acl_data_packets;
+        int slots = all_slots / 2;
+        controller_buffers_sem[0] = xSemaphoreCreateCounting(slots, slots);
+        controller_buffers_sem[1] = xSemaphoreCreateCounting(slots, slots);
+        controller_buffers_sem_count[0] = slots;
+        controller_buffers_sem_count[1] = slots;
+        all_controller_buffers_sem = xSemaphoreCreateCounting(all_slots, all_slots);
 
         xSemaphoreGive(output_queue_ready_sem);
     }
 }
 
-void handle_read_simple_pairing_mode_complete(HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET* packet)
+void dump_read_simple_pairing_mode_complete(HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET* packet)
 {
     printf("read simple pairing mode complete, status 0x%x mode %u\n", packet->status, packet->simple_pairing_mode);
 }
 
-void handle_read_local_name_complete(HCI_READ_LOCAL_NAME_COMPLETE_PACKET* packet)
+void dump_read_local_name_complete(HCI_READ_LOCAL_NAME_COMPLETE_PACKET* packet)
 {
     char local_name[HCI_MAX_LOCAL_NAME_SIZE + 1] = { };
     memcpy(local_name, packet->local_name, HCI_MAX_LOCAL_NAME_SIZE);
-
     printf("read local name complete, status 0x%x name %s\n", packet->status, local_name);
 }
 
-void handle_auth_code_complete(HCI_AUTH_CODE_COMPLETE_PACKET* packet, const char* name)
+void dump_auth_code_complete(HCI_AUTH_CODE_COMPLETE_PACKET* packet, const char* name)
 {
     printf("%s addr %s status 0x%x\n", name, bda_to_string(packet->addr), packet->status);
 }
 
-void handle_write_scan_enable_complete(HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET* packet)
+void dump_write_scan_enable_complete(HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET* packet)
 {
     printf("write_scan_enable complete status 0x%x\n", packet->status);
 }
 
-void handle_write_class_of_device_complete(HCI_WRITE_CLASS_OF_DEVICE_COMPLETE_PACKET* packet)
+void dump_write_class_of_device_complete(HCI_WRITE_CLASS_OF_DEVICE_COMPLETE_PACKET* packet)
 {
     printf("write_class_of_device complete status 0x%x\n", packet->status);
 }
 
-void handle_write_local_name_complete(HCI_WRITE_LOCAL_NAME_COMPLETE_PACKET* packet)
+void dump_write_local_name_complete(HCI_WRITE_LOCAL_NAME_COMPLETE_PACKET* packet)
 {
     printf("write_local_name complete status 0x%x\n", packet->status);
 }
 
-void handle_write_current_iac_lap_complete(HCI_WRITE_CURRENT_IAC_LAP_COMPLETE_PACKET* packet)
+void dump_write_current_iac_lap_complete(HCI_WRITE_CURRENT_IAC_LAP_COMPLETE_PACKET* packet)
 {
     printf("write_current_iac_lap complete status 0x%x\n", packet->status);
 }
 
-void handle_write_authentication_enable_complete(HCI_WRITE_AUTHENTICATION_ENABLE_COMPLETE_PACKET* packet)
+void dump_write_authentication_enable_complete(HCI_WRITE_AUTHENTICATION_ENABLE_COMPLETE_PACKET* packet)
 {
     printf("write_authentication_enable complete status 0x%x\n", packet->status);
 }
 
-void handle_write_encryption_mode_complete(HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET* packet)
+void dump_write_encryption_mode_complete(HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET* packet)
 {
     printf("write_encryption_mode complete status 0x%x\n", packet->status);
 }
 
-void handle_write_default_link_policy_settings_complete(HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMPLETE_PACKET* packet)
+void dump_write_default_link_policy_settings_complete(HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMPLETE_PACKET* packet)
 {
     printf("write_default_link_policy_settings complete status 0x%x\n", packet->status);
 }
 
-void handle_write_secure_connections_host_support_complete(HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET* packet)
+void dump_write_secure_connections_host_support_complete(HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET* packet)
 {
     printf("write_secure_connections_host_support complete status 0x%x\n", packet->status);
 }
 
-void handle_write_pin_type(HCI_WRITE_PIN_TYPE_COMPLETE_PACKET* packet)
+void dump_write_pin_type(HCI_WRITE_PIN_TYPE_COMPLETE_PACKET* packet)
 {
     printf("handle_write_pin_type complete status 0x%x\n", packet->status);
 }
 
-void handle_command(HCI_COMMAND_PACKET* packet)
+void dump_command(HCI_COMMAND_PACKET* packet)
 {
     printf("%s\n", get_hci_op_code_name(packet->op_code));
 }
 
-void handle_command_complete(uint8_t* packet, uint16_t size)
+void dump_command_complete(uint8_t* packet, uint16_t size)
 {
     uint16_t op_code = read_uint16(packet + 4);
     switch (op_code)
     {
         case HCI_OPCODE_RESET:
-            handle_reset_complete((HCI_RESET_COMPLETE_PACKET*)packet);
+            dump_reset_complete((HCI_RESET_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_READ_BD_ADDR:
-            handle_read_bd_addr_complete((HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET*)packet);
+            dump_read_bd_addr_complete((HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_READ_BUFFER_SIZE:
-            handle_read_buffer_size_complete((HCI_READ_BUFFER_SIZE_COMPLETE_PACKET*)packet);
+            dump_read_buffer_size_complete((HCI_READ_BUFFER_SIZE_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_READ_LOCAL_NAME:
-            handle_read_local_name_complete((HCI_READ_LOCAL_NAME_COMPLETE_PACKET*)packet);
+            dump_read_local_name_complete((HCI_READ_LOCAL_NAME_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_READ_SIMPLE_PAIRING_MODE:
-            handle_read_simple_pairing_mode_complete((HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET*)packet);
+            dump_read_simple_pairing_mode_complete((HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_PIN_CODE_REQUEST_REPLY:
-            handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_reply");
+            dump_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_reply");
             break;
         case HCI_OPCODE_PIN_CODE_REQUEST_NEGATIVE_REPLY:
-            handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_negative_reply");
+            dump_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_negative_reply");
             break;
         case HCI_OPCODE_LINK_KEY_REQUEST_REPLY:
-            handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_reply");
+            dump_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_reply");
             break;
         case HCI_OPCODE_LINK_KEY_REQUEST_NEGATIVE_REPLY:
-            handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_negative_reply");
+            dump_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_negative_reply");
             break;
         case HCI_OPCODE_WRITE_SCAN_ENABLE:
-            handle_write_scan_enable_complete((HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET*)packet);
+            dump_write_scan_enable_complete((HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_WRITE_CLASS_OF_DEVICE:
-            handle_write_class_of_device_complete((HCI_WRITE_CLASS_OF_DEVICE_COMPLETE_PACKET*)packet);
+            dump_write_class_of_device_complete((HCI_WRITE_CLASS_OF_DEVICE_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_WRITE_LOCAL_NAME:
-            handle_write_local_name_complete((HCI_WRITE_LOCAL_NAME_COMPLETE_PACKET*)packet);
+            dump_write_local_name_complete((HCI_WRITE_LOCAL_NAME_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_WRITE_CURRENT_IAC_LAP:
-            handle_write_current_iac_lap_complete((HCI_WRITE_CURRENT_IAC_LAP_COMPLETE_PACKET*)packet);
+            dump_write_current_iac_lap_complete((HCI_WRITE_CURRENT_IAC_LAP_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_WRITE_AUTHENTICATION_ENABLE:
-            handle_write_authentication_enable_complete((HCI_WRITE_AUTHENTICATION_ENABLE_COMPLETE_PACKET*)packet);
+            dump_write_authentication_enable_complete((HCI_WRITE_AUTHENTICATION_ENABLE_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_SET_CONNECTION_ENCRYPTION:
             printf("set_connection_encryption complete\n"); // no params
             break;
         case HCI_OPCODE_WRITE_DEFAULT_LINK_POLICY_SETTINGS:
-            handle_write_default_link_policy_settings_complete((HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMPLETE_PACKET*)packet);
+            dump_write_default_link_policy_settings_complete((HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT:
-            handle_write_secure_connections_host_support_complete((HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET*)packet);
+            dump_write_secure_connections_host_support_complete((HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_WRITE_PIN_TYPE:
-            handle_write_pin_type((HCI_WRITE_PIN_TYPE_COMPLETE_PACKET*)packet);
+            dump_write_pin_type((HCI_WRITE_PIN_TYPE_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_WRITE_ENCRYPTION_MODE:
-            handle_write_encryption_mode_complete((HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET*)packet);
+            dump_write_encryption_mode_complete((HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET*)packet);
             break;
         default:
             printf("unhandled command complete 0x%04x\n", op_code);
@@ -613,7 +661,75 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
     }
 }
 
-void handle_command_status(uint8_t* packet, uint16_t size)
+void handle_command_complete(uint8_t* packet, uint16_t size)
+{
+    uint16_t op_code = read_uint16(packet + 4);
+    switch (op_code)
+    {
+        // case HCI_OPCODE_RESET:
+        //     handle_reset_complete((HCI_RESET_COMPLETE_PACKET*)packet);
+        //     break;
+        case HCI_OPCODE_READ_BD_ADDR:
+            handle_read_bd_addr_complete((HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET*)packet);
+            break;
+        case HCI_OPCODE_READ_BUFFER_SIZE:
+            handle_read_buffer_size_complete((HCI_READ_BUFFER_SIZE_COMPLETE_PACKET*)packet);
+            break;
+        // case HCI_OPCODE_READ_LOCAL_NAME:
+        //     handle_read_local_name_complete((HCI_READ_LOCAL_NAME_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_READ_SIMPLE_PAIRING_MODE:
+        //     handle_read_simple_pairing_mode_complete((HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_PIN_CODE_REQUEST_REPLY:
+        //     handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_reply");
+        //     break;
+        // case HCI_OPCODE_PIN_CODE_REQUEST_NEGATIVE_REPLY:
+        //     handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_negative_reply");
+        //     break;
+        // case HCI_OPCODE_LINK_KEY_REQUEST_REPLY:
+        //     handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_reply");
+        //     break;
+        // case HCI_OPCODE_LINK_KEY_REQUEST_NEGATIVE_REPLY:
+        //     handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_negative_reply");
+        //     break;
+        // case HCI_OPCODE_WRITE_SCAN_ENABLE:
+        //     handle_write_scan_enable_complete((HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_WRITE_CLASS_OF_DEVICE:
+        //     handle_write_class_of_device_complete((HCI_WRITE_CLASS_OF_DEVICE_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_WRITE_LOCAL_NAME:
+        //     handle_write_local_name_complete((HCI_WRITE_LOCAL_NAME_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_WRITE_CURRENT_IAC_LAP:
+        //     handle_write_current_iac_lap_complete((HCI_WRITE_CURRENT_IAC_LAP_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_WRITE_AUTHENTICATION_ENABLE:
+        //     handle_write_authentication_enable_complete((HCI_WRITE_AUTHENTICATION_ENABLE_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_SET_CONNECTION_ENCRYPTION:
+        //     printf("set_connection_encryption complete\n"); // no params
+        //     break;
+        // case HCI_OPCODE_WRITE_DEFAULT_LINK_POLICY_SETTINGS:
+        //     handle_write_default_link_policy_settings_complete((HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT:
+        //     handle_write_secure_connections_host_support_complete((HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_WRITE_PIN_TYPE:
+        //     handle_write_pin_type((HCI_WRITE_PIN_TYPE_COMPLETE_PACKET*)packet);
+        //     break;
+        // case HCI_OPCODE_WRITE_ENCRYPTION_MODE:
+        //     handle_write_encryption_mode_complete((HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET*)packet);
+        //     break;
+        // default:
+        //     printf("unhandled command complete 0x%04x\n", op_code);
+        //     break;
+    }
+}
+
+void dump_command_status(uint8_t* packet, uint16_t size)
 {
     uint8_t status = packet[3];
     uint16_t op_code = read_uint16(packet + 5);
@@ -621,7 +737,7 @@ void handle_command_status(uint8_t* packet, uint16_t size)
     printf("%s status 0x%x\n", get_hci_op_code_name(op_code), status);
 }
 
-void handle_number_of_completed_packets(uint8_t* packet, uint16_t size)
+void dump_number_of_completed_packets(uint8_t* packet, uint16_t size)
 {
     uint8_t num_handles = packet[3];
     uint8_t* p = packet + 4;
@@ -632,16 +748,33 @@ void handle_number_of_completed_packets(uint8_t* packet, uint16_t size)
 
         printf("number_of_completed_packets handle 0x%x completed %u\n", con_handle, num_completed);
 
+        p += 4;
+    }
+}
+
+void peek_number_of_completed_packets(uint8_t* packet, uint16_t size)
+{
+    uint8_t num_handles = packet[3];
+    uint8_t* p = packet + 4;
+    for (int i = 0; i < num_handles; i++)
+    {
+        uint16_t con_handle = read_uint16(p);
+        uint16_t num_completed = read_uint16(p + 2);
+
+        printf("peek number_of_completed_packets handle 0x%x completed %u\n", con_handle, num_completed);
+
+        xSemaphoreGive(all_controller_buffers_sem);
+
         for (int j = 0; j < num_completed; j++)
         {
-            xSemaphoreGive(controller_buffers_sem);
+            xSemaphoreGive(get_queue_sem(con_handle, 1));
         }
 
         p += 4;
     }
 }
 
-void handle_qos_setup_complete(HCI_QOS_SETUP_COMPLETE_EVENT_PACKET* packet)
+void dump_qos_setup_complete(HCI_QOS_SETUP_COMPLETE_EVENT_PACKET* packet)
 {
     printf("qos setup con_handle 0x%x status 0x%x "
         "service_type 0x%x token_rate %u peak_bandwidth %u "
@@ -651,17 +784,17 @@ void handle_qos_setup_complete(HCI_QOS_SETUP_COMPLETE_EVENT_PACKET* packet)
         packet->latency, packet->delay_variation);
 }
 
-void handle_max_slots_changed(HCI_EVENT_MAX_SLOTS_CHANGED_EVENT_PACKET* packet)
+void dump_max_slots_changed(HCI_EVENT_MAX_SLOTS_CHANGED_EVENT_PACKET* packet)
 {
     printf("max slots changed handle 0x%x lmp_max_slots %u\n", packet->con_handle, packet->lmp_max_slots);
 }
 
-void handle_role_change(HCI_ROLE_CHANGE_EVENT_PACKET* packet)
+void dump_role_change(HCI_ROLE_CHANGE_EVENT_PACKET* packet)
 {
     printf("role change for %s status 0x%x new_role %u\n", bda_to_string(packet->addr), packet->status, packet->new_role);
 }
 
-void handle_link_key_notification(HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET* packet)
+void dump_link_key_notification(HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET* packet)
 {
     printf("new link key for %s type %u", bda_to_string(packet->addr), packet->key_type);
     for (int i = 0; i < HCI_LINK_KEY_SIZE; i++)
@@ -669,46 +802,49 @@ void handle_link_key_notification(HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET* packet
         printf(" %02x", packet->link_key[i]);
     }
     printf("\n");
+}
 
+void handle_link_key_notification(HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET* packet)
+{
 #ifndef WII_REMOTE_HOST
     esp_err_t err = nvs_set_blob(wii_controller.nvs_handle, LINK_KEY_BLOB_NAME, packet->link_key, HCI_LINK_KEY_SIZE);
     ESP_ERROR_CHECK(err);
 #endif
 }
 
-void handle_disconnection_complete(HCI_DISCONNECTION_COMPLETE_EVENT_PACKET* packet)
+void dump_disconnection_complete(HCI_DISCONNECTION_COMPLETE_EVENT_PACKET* packet)
 {
     printf("disconnected handle 0x%04x status 0x%x reason 0x%x\n", packet->con_handle, packet->status, packet->reason);
 }
 
-void handle_encryption_change(HCI_ENCRYPTION_CHANGE_EVENT_PACKET* packet)
+void dump_encryption_change(HCI_ENCRYPTION_CHANGE_EVENT_PACKET* packet)
 {
     printf("encryption changed status 0x%x handle 0x%x encryption_enabled %u\n", packet->status, packet->con_handle, packet->encryption_enabled);
 }
 
-void handle_mode_change(HCI_MODE_CHANGE_EVENT_PACKET* packet)
+void dump_mode_change(HCI_MODE_CHANGE_EVENT_PACKET* packet)
 {
     printf("mode changed handle 0x%x status 0x%x current_mode 0x%x interval 0x%x\n", packet->con_handle, packet->status, packet->current_mode, packet->interval);
 }
 
-void handle_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PACKET* packet)
+void dump_l2cap_connection_request(L2CAP_CONNECTION_REQUEST_PACKET* packet)
 {
     printf("l2cap connection request con_handle 0x%x id 0x%x psm 0x%x source_cid 0x%x\n", packet->con_handle, packet->identifier, packet->psm, packet->source_cid);
 
 }
 
-void handle_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_PACKET* packet)
+void dump_l2cap_connection_response(L2CAP_CONNECTION_RESPONSE_PACKET* packet)
 {
     printf("l2cap conn response con_handle 0x%x id 0x%x dest_cid 0x%x source_cid 0x%x result 0x%x status 0x%x\n",
         packet->con_handle, packet->identifier, packet->dest_cid, packet->source_cid, packet->result, packet->status);
 }
 
-void handle_l2cap_command_reject(L2CAP_COMMAND_REJECT_PACKET* packet)
+void dump_l2cap_command_reject(L2CAP_COMMAND_REJECT_PACKET* packet)
 {
     printf("l2cap cmd rejected con_handle 0x%x id 0x%x reason 0x%02x\n", packet->con_handle, packet->identifier, packet->reason);
 }
 
-void handle_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request_packet)
+void dump_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request_packet)
 {
     uint16_t options_size = request_packet->payload_size - 4;
 
@@ -717,7 +853,7 @@ void handle_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request_packet)
     printf("\n");
 }
 
-void handle_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packet)
+void dump_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packet)
 {
     uint16_t options_size = packet->payload_size - 6;
 
@@ -726,40 +862,40 @@ void handle_l2cap_config_response(L2CAP_CONFIG_RESPONSE_PACKET* packet)
     printf("\n");
 }
 
-void handle_l2cap_disconnection_request(L2CAP_DISCONNECTION_REQUEST_PACKET* packet)
+void dump_l2cap_disconnection_request(L2CAP_DISCONNECTION_REQUEST_PACKET* packet)
 {
     printf("l2cap disconnect request con_handle 0x%x id 0x%x dest_cid 0x%0x source_cid 0x%x\n", packet->con_handle, packet->identifier, packet->dest_cid, packet->source_cid);
 }
 
-void handle_l2cap_disconnection_response(L2CAP_DISCONNECTION_RESPONSE_PACKET* packet)
+void dump_l2cap_disconnection_response(L2CAP_DISCONNECTION_RESPONSE_PACKET* packet)
 {
     printf("l2cap disconnect response con_handle 0x%x id 0x%x dest_cid 0x%0x source_cid 0x%x\n", packet->con_handle, packet->identifier, packet->dest_cid, packet->source_cid);
 }
 
-void handle_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
+void dump_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
 {
     switch (packet->code)
     {
         case L2CAP_CONNECTION_REQUEST:
-            handle_l2cap_connection_request((L2CAP_CONNECTION_REQUEST_PACKET*)packet);
+            dump_l2cap_connection_request((L2CAP_CONNECTION_REQUEST_PACKET*)packet);
             break;
         case L2CAP_CONNECTION_RESPONSE:
-            handle_l2cap_connection_response((L2CAP_CONNECTION_RESPONSE_PACKET*)packet);
+            dump_l2cap_connection_response((L2CAP_CONNECTION_RESPONSE_PACKET*)packet);
             break;
         case L2CAP_CONFIG_REQUEST:
-            handle_l2cap_config_request((L2CAP_CONFIG_REQUEST_PACKET*)packet);
+            dump_l2cap_config_request((L2CAP_CONFIG_REQUEST_PACKET*)packet);
             break;
         case L2CAP_CONFIG_RESPONSE:
-            handle_l2cap_config_response((L2CAP_CONFIG_RESPONSE_PACKET*)packet);
+            dump_l2cap_config_response((L2CAP_CONFIG_RESPONSE_PACKET*)packet);
             break;
         case L2CAP_COMMAND_REJECT:
-            handle_l2cap_command_reject((L2CAP_COMMAND_REJECT_PACKET*)packet);
+            dump_l2cap_command_reject((L2CAP_COMMAND_REJECT_PACKET*)packet);
             break;
         case L2CAP_DISCONNECTION_REQUEST:
-            handle_l2cap_disconnection_request((L2CAP_DISCONNECTION_REQUEST_PACKET*)packet);
+            dump_l2cap_disconnection_request((L2CAP_DISCONNECTION_REQUEST_PACKET*)packet);
             break;
         case L2CAP_DISCONNECTION_RESPONSE:
-            handle_l2cap_disconnection_response((L2CAP_DISCONNECTION_RESPONSE_PACKET*)packet);
+            dump_l2cap_disconnection_response((L2CAP_DISCONNECTION_RESPONSE_PACKET*)packet);
             break;
         default:
             printf("unhandled signal channel code 0x%x\n", packet->code);
@@ -770,19 +906,31 @@ void handle_l2cap_signal_channel(L2CAP_SIGNAL_CHANNEL_PACKET* packet)
 #define DUMP_WIDTH 32
 void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
 {
-#ifdef WII_REMOTE_HOST
-    if (io_direction == INPUT_PACKET)
-    {
-        if ((size == 13 && memcmp(packet, (uint8_t*)"\x02\x81\x20\x08\x00\x04\x00\x13\x01\xa1\x30\x00\x00", 13) == 0) ||
-            (size == 28 && memcmp(packet, (uint8_t*)"\x02\x81\x20\x17\x00\x13\x00\x13\x01\xa1\x33\x20\x60\x80\x81\x9c\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", 28) == 0))
-        {
-            return;
-        }
-    }
+    //#ifdef WII_REMOTE_HOST
+        //static int skip;
+        //uint8_t* hid4 = packet + size - 4;
+        //uint8_t* hid19 = packet + size - 19;
+        // if (
+        //     ((size >= 4 && memcmp(hid4, (uint8_t*)"\xa1\x30\x00\x00", 4) == 0) ||
+        //     (size >= 19 && memcmp(hid19, (uint8_t*)"\xa1\x33\x20\x60\x80\x81\x9c\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff", 19) == 0)))
+        // {
+        //     skip++;
+        //     return;
+        // }
 
-#endif
+    //#endif
 
-    static uint16_t last_channel;
+    HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
+    HCI_EVENT_PACKET* event_packet = (HCI_EVENT_PACKET*)packet;
+    L2CAP_PACKET* l2cap_packet = (L2CAP_PACKET*)packet;
+
+    // if (acl_packet->type == HCI_EVENT_PACKET_TYPE &&
+    //     event_packet->event_code == HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS)
+    // {
+    //     return;
+    // }
+
+    static uint16_t last_channel[2];
 
     for (int i = 0; i < size; i++)
     {
@@ -810,50 +958,46 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
     }
     printf("  ");
 
-    HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
-    HCI_EVENT_PACKET* event_packet = (HCI_EVENT_PACKET*)packet;
-    L2CAP_PACKET* l2cap_packet = (L2CAP_PACKET*)packet;
-
     switch (acl_packet->type)
     {
         case HCI_COMMAND_PACKET_TYPE:
-            handle_command((HCI_COMMAND_PACKET*)packet);
+            dump_command((HCI_COMMAND_PACKET*)packet);
             break;
         case HCI_EVENT_PACKET_TYPE:
             switch (event_packet->event_code)
             {
                 case HCI_EVENT_COMMAND_COMPLETE:
-                    handle_command_complete(packet, size);
+                    dump_command_complete(packet, size);
                     break;
                 case HCI_EVENT_COMMAND_STATUS:
-                    handle_command_status(packet, size);
+                    dump_command_status(packet, size);
                     break;
                 case HCI_EVENT_MAX_SLOTS_CHANGED:
-                    handle_max_slots_changed((HCI_EVENT_MAX_SLOTS_CHANGED_EVENT_PACKET*)packet);
+                    dump_max_slots_changed((HCI_EVENT_MAX_SLOTS_CHANGED_EVENT_PACKET*)packet);
                     break;
                 case HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS:
-                    handle_number_of_completed_packets(packet, size);
+                    dump_number_of_completed_packets(packet, size);
                     break;
                 case HCI_EVENT_QOS_SETUP_COMPLETE:
-                    handle_qos_setup_complete((HCI_QOS_SETUP_COMPLETE_EVENT_PACKET*)packet);
+                    dump_qos_setup_complete((HCI_QOS_SETUP_COMPLETE_EVENT_PACKET*)packet);
                     break;
                 case HCI_EVENT_HARDWARE_ERROR:
                     printf("hardware error\n");
                     break;
                 case HCI_EVENT_ROLE_CHANGE:
-                    handle_role_change((HCI_ROLE_CHANGE_EVENT_PACKET*)packet);
+                    dump_role_change((HCI_ROLE_CHANGE_EVENT_PACKET*)packet);
                     break;
                 case HCI_EVENT_LINK_KEY_NOTIFICATION:
-                    handle_link_key_notification((HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET*)packet);
+                    dump_link_key_notification((HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET*)packet);
                     break;
                 case HCI_EVENT_DISCONNECTION_COMPLETE:
-                    handle_disconnection_complete((HCI_DISCONNECTION_COMPLETE_EVENT_PACKET*)packet);
-                    break;
-                case HCI_EVENT_ENCRYPTION_CHANGE:
-                    handle_encryption_change((HCI_ENCRYPTION_CHANGE_EVENT_PACKET*)packet);
+                    dump_disconnection_complete((HCI_DISCONNECTION_COMPLETE_EVENT_PACKET*)packet);
                     break;
                 case HCI_EVENT_MODE_CHANGE:
-                    handle_mode_change((HCI_MODE_CHANGE_EVENT_PACKET*)packet);
+                    dump_mode_change((HCI_MODE_CHANGE_EVENT_PACKET*)packet);
+                    break;
+                case HCI_EVENT_ENCRYPTION_CHANGE:
+                    dump_encryption_change((HCI_ENCRYPTION_CHANGE_EVENT_PACKET*)packet);
                     break;
                 default:
                     printf("%s\n", get_hci_event_name(event_packet->event_code));
@@ -870,7 +1014,7 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
             uint16_t local_channel = l2cap_packet->channel;
             if (acl_packet->packet_boundary_flag == L2CAP_PB_FRAGMENT)
             {
-                local_channel = last_channel;
+                local_channel = last_channel[io_direction - 1];
             }
 
             if (io_direction == OUTPUT_PACKET)
@@ -888,14 +1032,18 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
                     local_channel = WII_CONTROL_LOCAL_CID;
                 }
             }
+            else
+            {
+
+            }
 
             if (acl_packet->packet_boundary_flag == L2CAP_PB_FIRST_FLUSH)
             {
-                last_channel = l2cap_packet->channel;
+                last_channel[io_direction - 1] = l2cap_packet->channel;
                 switch (local_channel)
                 {
                     case L2CAP_SIGNAL_CHANNEL:
-                        handle_l2cap_signal_channel((L2CAP_SIGNAL_CHANNEL_PACKET*)packet);
+                        dump_l2cap_signal_channel((L2CAP_SIGNAL_CHANNEL_PACKET*)packet);
                         break;
                     case WII_CONTROL_LOCAL_CID:
                         printf("wii control\n");
@@ -919,7 +1067,7 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
                         printf("sdp\n");
                         break;
                     default:
-                        printf("unhandled acl fragment in channel 0x%x\n", last_channel);
+                        printf("unhandled acl fragment in channel 0x%x\n", last_channel[io_direction - 1]);
                         break;
                 }
             }
@@ -933,6 +1081,61 @@ void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size)
         }
         default:
             printf("unhandled packet type 0x%02x\n", acl_packet->type);
+            break;
+    }
+}
+
+void wii_controller_packet_handler(uint8_t* packet, uint16_t size)
+{
+    HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
+    HCI_EVENT_PACKET* event_packet = (HCI_EVENT_PACKET*)packet;
+    //L2CAP_PACKET* l2cap_packet = (L2CAP_PACKET*)packet;
+
+    switch (acl_packet->type)
+    {
+        // case HCI_COMMAND_PACKET_TYPE:
+        //     handle_command((HCI_COMMAND_PACKET*)packet);
+        //     break;
+        case HCI_EVENT_PACKET_TYPE:
+            switch (event_packet->event_code)
+            {
+                case HCI_EVENT_COMMAND_COMPLETE:
+                    handle_command_complete(packet, size);
+                    break;
+                // case HCI_EVENT_COMMAND_STATUS:
+                //     handle_command_status(packet, size);
+                //     break;
+                // case HCI_EVENT_MAX_SLOTS_CHANGED:
+                //     handle_max_slots_changed((HCI_EVENT_MAX_SLOTS_CHANGED_EVENT_PACKET*)packet);
+                //     break;
+                // case HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS:
+                //     handle_number_of_completed_packets(packet, size);
+                //     break;
+                // case HCI_EVENT_QOS_SETUP_COMPLETE:
+                //     handle_qos_setup_complete((HCI_QOS_SETUP_COMPLETE_EVENT_PACKET*)packet);
+                //     break;
+                // case HCI_EVENT_HARDWARE_ERROR:
+                //     printf("hardware error\n");
+                //     break;
+                // case HCI_EVENT_ROLE_CHANGE:
+                //     handle_role_change((HCI_ROLE_CHANGE_EVENT_PACKET*)packet);
+                //     break;
+                case HCI_EVENT_LINK_KEY_NOTIFICATION:
+                    handle_link_key_notification((HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET*)packet);
+                    break;
+                // case HCI_EVENT_DISCONNECTION_COMPLETE:
+                //     handle_disconnection_complete((HCI_DISCONNECTION_COMPLETE_EVENT_PACKET*)packet);
+                //     break;
+                // case HCI_EVENT_MODE_CHANGE:
+                //     handle_mode_change((HCI_MODE_CHANGE_EVENT_PACKET*)packet);
+                //     break;
+                // case HCI_EVENT_ENCRYPTION_CHANGE:
+                //     handle_encryption_change((HCI_ENCRYPTION_CHANGE_EVENT_PACKET*)packet);
+                //     break;
+                default:
+                    printf("%s\n", get_hci_event_name(event_packet->event_code));
+                    break;
+            }
             break;
     }
 }
