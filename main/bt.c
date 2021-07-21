@@ -289,7 +289,7 @@ BT_PACKET_ENVELOPE* create_hci_pin_code_request_negative_reply_packet(const bd_a
 }
 
 
-BT_PACKET_ENVELOPE* create_hci_write_authentication_enable(uint8_t enable)
+BT_PACKET_ENVELOPE* create_hci_write_authentication_enable_packet(uint8_t enable)
 {
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_AUTHENTICATION_ENABLE, PARAMS_SIZE(HCI_WRITE_AUTHENTICATION_ENABLE_PACKET));
     HCI_WRITE_AUTHENTICATION_ENABLE_PACKET* packet = (HCI_WRITE_AUTHENTICATION_ENABLE_PACKET*)env->packet;
@@ -299,7 +299,7 @@ BT_PACKET_ENVELOPE* create_hci_write_authentication_enable(uint8_t enable)
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_hci_write_encryption_mode(uint8_t encryption_mode)
+BT_PACKET_ENVELOPE* create_hci_write_encryption_mode_packet(uint8_t encryption_mode)
 {
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_ENCRYPTION_MODE, PARAMS_SIZE(HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET));
     HCI_WRITE_ENCRYPTION_MODE_PACKET* packet = (HCI_WRITE_ENCRYPTION_MODE_PACKET*)env->packet;
@@ -308,6 +308,38 @@ BT_PACKET_ENVELOPE* create_hci_write_encryption_mode(uint8_t encryption_mode)
 
     return env;
 }
+
+BT_PACKET_ENVELOPE* create_hci_set_connection_encryption_packet(uint16_t con_handle, uint8_t encryption_enable)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_SET_CONNECTION_ENCRYPTION, PARAMS_SIZE(HCI_SET_CONNECTION_ENCRYPTION_PACKET));
+    HCI_SET_CONNECTION_ENCRYPTION_PACKET* packet = (HCI_SET_CONNECTION_ENCRYPTION_PACKET*)env->packet;
+
+    packet->con_handle = con_handle;
+    packet->encryption_enable = encryption_enable;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_exit_park_state_packet(uint16_t con_handle)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_EXIT_PARK_STATE, PARAMS_SIZE(HCI_EXIT_PARK_STATE_PACKET));
+    HCI_EXIT_PARK_STATE_PACKET* packet = (HCI_EXIT_PARK_STATE_PACKET*)env->packet;
+
+    packet->con_handle = con_handle;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_read_remote_supported_features_packet(uint16_t con_handle)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_READ_REMOTE_SUPPORTED_FEATURES_COMMAND, PARAMS_SIZE(HCI_READ_REMOTE_SUPPORTED_FEATURES_PACKET));
+    HCI_READ_REMOTE_SUPPORTED_FEATURES_PACKET* packet = (HCI_READ_REMOTE_SUPPORTED_FEATURES_PACKET*)env->packet;
+
+    packet->con_handle = con_handle;
+
+    return env;
+}
+
 
 BT_PACKET_ENVELOPE* create_hci_set_connection_encryption(uint16_t con_handle, uint8_t encryption_enable)
 {

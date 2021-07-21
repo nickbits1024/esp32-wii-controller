@@ -1,7 +1,7 @@
 #include "wii_controller.h"
 
 bd_addr_t wii_remote_bda;
-bd_addr_t wii_bda;
+//bd_addr_t wii_bda;
 xQueueHandle transfer_queue_handle;
 
 void wii_mitm_flush_queue();
@@ -85,7 +85,7 @@ void handle_wii_mitm_remote_name_request_complete(uint8_t* packet, uint16_t size
             printf("connecting to %s (%s)...\n", bda_to_string(addr), name);
 
             post_bt_packet(create_hci_inquiry_cancel_packet());
-            post_bt_packet(create_hci_create_connection_packet(addr, 0x18, 0, false, 0, 0));
+			post_bt_packet(create_hci_create_connection_packet(addr, 0x18, 0, false, 0, 0));
             memcpy(wii_remote_bda, addr, BDA_SIZE);
             wii_controller.state = WII_MITM_DISCOVERED;
         }
@@ -97,14 +97,23 @@ void handle_wii_mitm_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACKET* pac
     uint32_t cod = uint24_bytes_to_uint32(packet->class_of_device);
     printf("connection request from %s cod %06x type %u\n", bda_to_string(packet->addr), cod, packet->link_type);
 
-    if (wii_controller.state == WII_MITM_PAIRING_PENDING &&
+    if ((wii_controller.state == WII_MITM_PAIRING_PENDING || wii_controller.state == WII_MITM_CONNECTION_PENDING)&&
         packet->link_type == HCI_LINK_TYPE_ACL &&
         cod == WII_COD)
     {
-        printf("accepting wii connection...\n");
-        memcpy(wii_bda, packet->addr, BDA_SIZE);
+        printf("accepting wii connection from %s...\n", bda_to_string(wii_addr));
+        memcpy(wii_addr, packet->addr, BDA_SIZE);
+        nvs_set_blob(wii_controller.nvs_handle, WII_ADDR_BLOB_NAME, wii_addr, BDA_SIZE);
         wii_controller.state = WII_MITM_CONNECTING;
         post_bt_packet(create_hci_accept_connection_request_packet(packet->addr, HCI_ROLE_SLAVE));
+    }
+    else if (wii_controller.state == WII_MITM_CONNECTION_PENDING &&
+        packet->link_type == HCI_LINK_TYPE_ACL &&
+        cod == WII_REMOTE_COD)
+    {
+        printf("accepting wii remote connection from %s...\n", bda_to_string(packet->addr));
+        wii_controller.state = WII_MITM_CONNECTING_DUAL;
+        post_bt_packet(create_hci_accept_connection_request_packet(packet->addr, HCI_ROLE_MASTER));
     }
     else
     {
@@ -118,7 +127,28 @@ void handle_wii_mitm_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* p
     printf("connection complete addr %s status 0x%02x con_handle 0x%x, link_type %u encrypted %u\n", bda_to_string(packet->addr), packet->status, packet->con_handle, packet->link_type, packet->encryption_enabled);
     if (packet->status == 0)
     {
-        if (wii_controller.state == WII_MITM_CONNECTING)
+        if (wii_controller.state == WII_MITM_CONNECTING_DUAL)
+        {
+            if (memcmp(packet->addr, wii_addr, BDA_SIZE) == 0)
+            {
+                wii_controller.wii_con_handle = packet->con_handle;
+                printf("wii connected con_handle 0x%x...\n", packet->con_handle);
+            }
+            else
+            {
+                wii_controller.wii_remote_con_handle = packet->con_handle;
+                printf("wii remote connected con_handle 0x%x...\n", packet->con_handle);
+                printf("connecting to wii at %s...\n", bda_to_string(wii_addr));
+                post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x8, 0, false, 0, HCI_ROLE_SLAVE));
+            }
+
+            if (wii_controller.wii_con_handle != INVALID_HANDLE_VALUE && 
+                wii_controller.wii_remote_con_handle != INVALID_HANDLE_VALUE)
+            {
+                wii_mitm_flush_queue();
+            }
+        }
+        else if (wii_controller.state == WII_MITM_CONNECTING)
         {
             wii_controller.wii_con_handle = packet->con_handle;
             //wii_controller.state = WII_MITM_CONNECTED;
@@ -127,7 +157,6 @@ void handle_wii_mitm_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* p
         }
         else if (wii_controller.state == WII_MITM_DISCOVERED)
         {
-
             wii_controller.wii_remote_con_handle = packet->con_handle;
 
             //wii_controller.state = WII_MITM_PAIRING_PENDING;
@@ -232,10 +261,40 @@ void handle_wii_mitm_pin_code_request(HCI_PIN_CODE_REQUEST_EVENT_PACKET* packet)
 
     uint8_t pin[BDA_SIZE];
 
-    memcpy(pin, wii_bda, BDA_SIZE);
+    memcpy(pin, wii_addr, BDA_SIZE);
     printf("sending pin code %02x %02x %02x %02x %02x %02x\n", pin[0], pin[1], pin[2], pin[3], pin[4], pin[5]);
 
     post_bt_packet(create_hci_pin_code_request_reply_packet(packet->addr, pin, BDA_SIZE));
+}
+
+void handle_wii_mitm_remote_link_key_request(HCI_LINK_KEY_REQUEST_EVENT_PACKET* packet)
+{
+    //reverse_bda(packet->addr);
+
+    printf("link key request from %s...\n", bda_to_string(packet->addr));
+
+    switch (wii_controller.state)
+    {
+        case WII_MITM_CONNECTING_DUAL:
+        {
+            uint8_t link_key[HCI_LINK_KEY_SIZE];
+            size_t size = HCI_LINK_KEY_SIZE;
+            esp_err_t err = nvs_get_blob(wii_controller.nvs_handle, LINK_KEY_BLOB_NAME, link_key, &size);
+            if (err == ESP_OK && size == HCI_LINK_KEY_SIZE)
+            {
+                printf("returning stored link key");
+                for (int i = 0; i < HCI_LINK_KEY_SIZE; i++)
+                {
+                    printf(" %02x", link_key[i]);
+                }
+                printf("\n");
+                post_bt_packet(create_hci_link_key_request_reply_packet(packet->addr, link_key));
+            }
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 void wii_mitm_packet_handler(uint8_t* packet, uint16_t size)
@@ -265,6 +324,9 @@ void wii_mitm_packet_handler(uint8_t* packet, uint16_t size)
                     break;
                 case HCI_EVENT_PIN_CODE_REQUEST:
                     handle_wii_mitm_pin_code_request((HCI_PIN_CODE_REQUEST_EVENT_PACKET*)packet);
+                    break;
+                case HCI_EVENT_LINK_KEY_REQUEST:
+                    handle_wii_mitm_remote_link_key_request((HCI_LINK_KEY_REQUEST_EVENT_PACKET*)packet);
                     break;
                 // case HCI_EVENT_LINbK_KEY_REQUEST:
                 //     handle_wii_mitm_link_key_request((HCI_LINK_KEY_REQUEST_EVENT_PACKET*)packet);
@@ -304,7 +366,15 @@ void wii_mitm()
 
     transfer_queue_handle = xQueueCreate(10, sizeof(BT_PACKET_ENVELOPE*));
 
-    wii_controller.state = WII_MITM_PAIRING_PENDING;
+    wii_controller.state = WII_MITM_CONNECTION_PENDING;
+
+    size_t size = BDA_SIZE;
+    esp_err_t ret = nvs_get_blob(wii_controller.nvs_handle, WII_ADDR_BLOB_NAME, wii_addr, &size);
+    if (ret == ESP_OK && size == BDA_SIZE)
+    {
+        printf("stored wii at %s\n", bda_to_string(wii_addr));
+
+    }
 
     //find_wii_remote();
 }

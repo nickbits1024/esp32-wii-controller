@@ -58,6 +58,7 @@
 #define HCI_OPCODE_REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY HCI_OPCODE(OGF_LINK_CONTROL, 0x45)
 #define HCI_OPCODE_SNIFF_MODE HCI_OPCODE(OGF_LINK_POLICY,   0x03)
 #define HCI_OPCODE_EXIT_SNIFF_MODE HCI_OPCODE(OGF_LINK_POLICY,   0x04)
+#define HCI_OPCODE_EXIT_PARK_STATE HCI_OPCODE(OGF_LINK_POLICY,   0x06)
 #define HCI_OPCODE_QOS_SETUP HCI_OPCODE(OGF_LINK_POLICY,   0x07)
 #define HCI_OPCODE_ROLE_DISCOVERY HCI_OPCODE(OGF_LINK_POLICY,   0x09)
 #define HCI_OPCODE_SWITCH_ROLE_COMMAND HCI_OPCODE(OGF_LINK_POLICY,   0x0b)
@@ -508,6 +509,24 @@ typedef struct
     uint16_t clock_offset;
 }
 __attribute__((packed)) HCI_REMOTE_NAME_REQUEST_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    uint16_t con_handle;
+}
+__attribute__((packed)) HCI_READ_REMOTE_SUPPORTED_FEATURES_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    uint16_t con_handle;
+}
+__attribute__((packed)) HCI_EXIT_PARK_STATE_PACKET;
 
 typedef struct
 {
@@ -1289,9 +1308,11 @@ BT_PACKET_ENVELOPE* create_hci_accept_connection_request_packet(bd_addr_t addr, 
 BT_PACKET_ENVELOPE* create_hci_reject_connection_request_packet(bd_addr_t addr, uint8_t reason);
 BT_PACKET_ENVELOPE* create_hci_disconnect_packet(uint16_t con_handle, uint8_t reason);
 BT_PACKET_ENVELOPE* create_hci_write_class_of_device_packet(uint32_t class_of_device);
-BT_PACKET_ENVELOPE* create_hci_write_authentication_enable(uint8_t enable);
-BT_PACKET_ENVELOPE* create_hci_write_encryption_mode(uint8_t encryption_mode);
-BT_PACKET_ENVELOPE* create_hci_set_connection_encryption(uint16_t con_handle, uint8_t encryption_enable);
+BT_PACKET_ENVELOPE* create_hci_write_authentication_enable_packet(uint8_t enable);
+BT_PACKET_ENVELOPE* create_hci_write_encryption_mode_packet(uint8_t encryption_mode);
+BT_PACKET_ENVELOPE* create_hci_set_connection_encryption_packet(uint16_t con_handle, uint8_t encryption_enable);
+BT_PACKET_ENVELOPE* create_hci_exit_park_state_packet(uint16_t con_handle);
+BT_PACKET_ENVELOPE* create_hci_read_remote_supported_features_packet(uint16_t con_handle);
 BT_PACKET_ENVELOPE* create_hci_write_local_name(char* local_name);
 BT_PACKET_ENVELOPE* create_hci_current_iac_lap_packet(uint32_t iac_lap);
 BT_PACKET_ENVELOPE* create_hci_write_default_link_policy_settings_packet(uint16_t default_link_policy_settings);
@@ -1299,6 +1320,7 @@ BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint16_t s
 BT_PACKET_ENVELOPE* create_hci_qos_setup_packet(uint16_t con_handle, uint8_t flags, uint8_t service_type, uint32_t token_rate, uint32_t peak_bandwidth, uint32_t latency, uint32_t delay_variation);
 
 BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, const uint8_t* data, uint16_t data_size);
+BT_PACKET_ENVELOPE* create_l2cap_base_packet(uint16_t packet_size, uint16_t con_handle, uint16_t channel);
 BT_PACKET_ENVELOPE* create_l2cap_packet(uint16_t con_handle, uint16_t l2cap_size, uint16_t channel, const uint8_t* data, uint16_t data_size);
 BT_PACKET_ENVELOPE* create_l2cap_connection_request_packet(uint16_t con_handle, uint16_t psm, uint16_t source_cid);
 BT_PACKET_ENVELOPE* create_l2cap_connection_response_packet(uint16_t con_handle, uint8_t identifier, uint16_t dest_cid, uint16_t source_cid, uint16_t result, uint16_t status);

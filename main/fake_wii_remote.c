@@ -1,9 +1,6 @@
 #include "wii_controller.h"
 
-#define WII_ADDR_BLOB_NAME  "wii_addr"
-
 #if !defined(WII_REMOTE_HOST) && !defined(WII_MITM)
-bd_addr_t wii_addr;
 
 void send_disconnect(uint16_t con_handle, uint8_t reason);
 void send_power_off_disconnect(uint16_t con_handle);
@@ -53,11 +50,38 @@ void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PA
                 //open_control_channel(packet->con_handle);
                 wii_controller.state = WII_CONSOLE_POWER_ON_CONNECTED;
                 //post_bt_packet(create_hci_authentication_requested_packet(packet->con_handle));
-                post_bt_packet(create_hci_set_connection_encryption(packet->con_handle, 1));
+                //post_bt_packet(create_hci_set_connection_encryption(packet->con_handle, 1));
 
             default:
                 break;
         }
+
+        // uint8_t magic[17][6];
+
+        // memset(&magic[0], 0xff, BDA_SIZE);
+        // for (int i = 1; i < 17; i++)
+        //     memcpy(&magic[i], wii_addr, BDA_SIZE);
+
+        // post_bt_packet(create_l2cap_packet(packet->con_handle, L2CAP_AUTO_SIZE, 2, (uint8_t*)magic, sizeof(magic)));
+
+        //post_bt_packet(create_hci_read_remote_supported_features_packet(packet->con_handle));
+        //post_bt_packet(create_hci_exit_park_state_packet(packet->con_handle));
+
+        // uint8_t echo[] = { 'e' };
+
+        // uint16_t size = sizeof(L2CAP_SIGNAL_CHANNEL_PACKET) + 1;
+        // BT_PACKET_ENVELOPE* env  = create_l2cap_base_packet(size, packet->con_handle, L2CAP_SIGNAL_CHANNEL);
+        // L2CAP_SIGNAL_CHANNEL_PACKET* l2cap_packet = (L2CAP_SIGNAL_CHANNEL_PACKET*)env->packet;
+        // l2cap_packet->code = 0x08;
+        // l2cap_packet->broadcast_flag = 1;
+        // l2cap_packet->payload_size = sizeof(echo);
+        // memcpy(l2cap_packet->payload, echo, sizeof(echo));
+        // post_bt_packet(env);
+
+        // env = create_l2cap_connection_request_packet(packet->con_handle, WII_CONTROL_PSM, 0x48);
+        // l2cap_packet = (L2CAP_SIGNAL_CHANNEL_PACKET*)env->packet;
+        // l2cap_packet->broadcast_flag = 1;
+        post_bt_packet(env);
     }
     else if (packet->status == ERROR_CODE_CONNECTION_REJECTED_DUE_TO_UNACCEPTABLE_BD_ADDR)
     {
@@ -769,15 +793,14 @@ void send_disconnect(uint16_t con_handle, uint8_t reason)
 void connect_and_power_off()
 {
     wii_controller.state = WII_CONSOLE_POWER_OFF_PENDING;
-    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x3316, 0, false, 0, 1));
+    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x3316, 0, false, 0, 0));
 }
 
 void connect_and_power_on()
 {
     wii_controller.state = WII_CONSOLE_POWER_ON_PENDING;
-    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x08, 0, false, 0, 1));
+    post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x08, 1, false, 0, 0));
     //post_bt_packet(create_hci_switch_role_packet(wii_addr, HCI_ROLE_SLAVE));
-    //post_bt_packet(create_hci_
 }
 
 
@@ -785,7 +808,11 @@ void fake_wii_remote()
 {
     //post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH | HCI_LINK_POLICY_ENABLE_SNIFF_MODE | HCI_LINK_POLICY_ENABLE_HOLD_MODE));
     //post_bt_packet(create_hci_secure_connections_host_support_packet(1));
-    post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH));
+    post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH | 
+                                                                        HCI_LINK_POLICY_ENABLE_SNIFF_MODE | 
+                                                                        HCI_LINK_POLICY_ENABLE_SNIFF_MODE | 
+                                                                        HCI_LINK_POLICY_ENABLE_HOLD_MODE |
+                                                                        HCI_LINK_POLICY_ENABLE_PARK_STATE));
     post_bt_packet(create_hci_write_class_of_device_packet(WII_REMOTE_COD));
     post_bt_packet(create_hci_write_local_name(WII_REMOTE_NAME));
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
@@ -796,7 +823,7 @@ void fake_wii_remote()
 
     //post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE));
     //post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
-    post_bt_packet(create_hci_write_authentication_enable(1));
+    post_bt_packet(create_hci_write_authentication_enable_packet(1));
     //post_bt_packet(create_hci_write_encryption_mode(1));
 
     size_t size = BDA_SIZE;

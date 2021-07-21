@@ -113,6 +113,7 @@ void handle_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET*
         }
         else
         {
+            printf("state %u\n", wii_controller.state); 
             //open_data_channel(packet->con_handle);
         }
     }
@@ -624,8 +625,8 @@ void wii_remote_host()
     post_bt_packet(create_hci_write_class_of_device_packet(WII_COD));
     
 
-    //find_wii_remote();
     wii_controller.state = WII_REMOTE_CONNECTION_PENDING;
+    find_wii_remote();
 }
 
 #endif

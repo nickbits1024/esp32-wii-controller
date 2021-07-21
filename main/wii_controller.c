@@ -13,6 +13,7 @@ xSemaphoreHandle all_controller_buffers_sem;
 xSemaphoreHandle controller_buffers_sem[2];
 int controller_buffers_sem_count[2];
 bd_addr_t device_addr;
+bd_addr_t wii_addr;
 //portMUX_TYPE dump_mux = portMUX_INITIALIZER_UNLOCKED;
 
 void peek_number_of_completed_packets(uint8_t* packet, uint16_t size);
@@ -29,7 +30,7 @@ xSemaphoreHandle get_queue_sem(uint16_t con_handle, int add)
         controller_buffers_sem_count[1] += add;
         return controller_buffers_sem[1];
     }
-    printf("no queue for handle %x\n", con_handle);
+    printf("no queue for handle 0x%x\n", con_handle);
     abort();
 }
 
@@ -45,7 +46,7 @@ void queue_io_task(void* p)
             multi_heap_info_t heap_info;
             heap_caps_get_info(&heap_info, MALLOC_CAP_INTERNAL);
 
-            //dump_packet(env->io_direction, env->packet, env->size);
+            dump_packet(env->io_direction, env->packet, env->size);
 
             HCI_PACKET* hci_packet = (HCI_PACKET*)env->packet;
 

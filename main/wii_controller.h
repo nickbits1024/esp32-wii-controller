@@ -14,7 +14,7 @@
 #include "esp_int_wdt.h"
 
 //#define WII_REMOTE_HOST
-#define WII_MITM
+//#define WII_MITM
 
 #include "bt.h"
 #include "wii_bt.h"
@@ -42,6 +42,8 @@ void post_sdp_packet_fragment(uint16_t con_handle, uint8_t* data, uint16_t data_
 void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu);
 void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
+
+#define WII_ADDR_BLOB_NAME  "wii_addr"
 
 #define HOST_ACL_BUFFER_SIZE         0xffff
 #define HOST_NUM_ACL_BUFFERS         6
@@ -108,15 +110,18 @@ typedef enum
     WII_CONSOLE_POWER_OFF_DATA_OPENING,
     WII_CONSOLE_POWER_OFF_DATA_TRANSFER,
     WII_CONSOLE_POWER_OFF_DISCONNECTING,
-    WII_REMOTE_CONNECTION_PENDING,
+    WII_REMOTE_CONNECTION_PENDING = 50,
     WII_REMOTE_PAIRING_PENDING,
     WII_REMOTE_PAIRING_STARTED,
     WII_REMOTE_PAIRING_COMPLETE,
+    WII_MITM_CONNECTION_PENDING = 100,
     WII_MITM_WAIT_FIRST_PACKET,
+    //WII_MITM_WAIT_FIRST_PACKET_DUAL,
     WII_MITM_DISCOVERY,
     WII_MITM_DISCOVERED,
     WII_MITM_PAIRING_PENDING,
     WII_MITM_CONNECTING,
+    WII_MITM_CONNECTING_DUAL,
     WII_MITM_CONNECTED
 } 
 WII_CONTROLLER_STATE;
@@ -169,5 +174,6 @@ typedef struct _FOUND_DEVICE
 
 extern WII_CONTROLLER wii_controller;
 extern xSemaphoreHandle all_controller_buffers_sem;
+extern bd_addr_t wii_addr;
 
 //extern portMUX_TYPE dump_mux;
