@@ -103,7 +103,6 @@ void handle_wii_remote_remote_name_request_complete(uint8_t* packet, uint16_t si
 
 void handle_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* packet)
 {
-    printf("connection complete addr %s status 0x%02x con_handle 0x%x, link_type %u encrypted %u\n", bda_to_string(packet->addr), packet->status, packet->con_handle, packet->link_type, packet->encryption_enabled);
     if (packet->status == 0)
     {
         if (wii_controller.state == WII_REMOTE_PAIRING_PENDING)
@@ -518,7 +517,7 @@ void wii_remote_packet_handler(uint8_t* packet, uint16_t size)
             HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)packet;
             L2CAP_PACKET* l2cap_packet = (L2CAP_PACKET*)packet;
 
-            static uint16_t last_channel = INVALID_HANDLE_VALUE;
+            static uint16_t last_channel = INVALID_CON_HANDLE;
 
             if (acl_packet->packet_boundary_flag == L2CAP_PB_FIRST_FLUSH)
             {
@@ -623,7 +622,7 @@ void wii_remote_host()
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE));
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
     post_bt_packet(create_hci_write_class_of_device_packet(WII_COD));
-    
+    post_bt_packet(create_hci_write_local_name(WII_NAME));
 
     wii_controller.state = WII_REMOTE_CONNECTION_PENDING;
     find_wii_remote();

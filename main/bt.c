@@ -2,84 +2,6 @@
 
 uint8_t l2cap_identifier = 1;
 
-// void reverse_bda(bd_addr_t bda)
-// {
-//     uint8_t temp;
-//     temp = bda[0];
-//     bda[0] = bda[5];
-//     bda[5] = temp;
-//     temp = bda[1];
-//     bda[1] = bda[4];
-//     bda[4] = temp;
-//     temp = bda[2];
-//     bda[2] = bda[3];
-//     bda[3] = temp;
-// }
-
-// void read_bda(const uint8_t* p, bd_addr_t bda)
-// {
-//     // bda[0] = p[5];
-//     // bda[1] = p[4];
-//     // bda[2] = p[3];
-//     // bda[3] = p[2];
-//     // bda[4] = p[1];
-//     // bda[5] = p[0];
-// }
-
-// void write_bda(uint8_t* p, const bd_addr_t bda)
-// {
-//     p[0] = bda[5];
-//     p[1] = bda[4];
-//     p[2] = bda[3];
-//     p[3] = bda[2];
-//     p[4] = bda[1];
-//     p[5] = bda[0];
-// }
-
-uint16_t read_uint16(uint8_t* p)
-{
-    return *((uint16_t*)p);
-}
-
-uint16_t read_uint16_be(uint8_t* p)
-{
-    return (uint16_t)p[0] << 8 | p[1];
-}
-
-uint32_t read_uint24(const uint8_t* p)
-{
-    return ((uint32_t)p[0]) | (((uint32_t)p[1]) << 8) | (((uint32_t)p[2]) << 16);
-}
-
-void write_uint16_be(uint8_t* p, uint16_t value)
-{
-    p[0] = value >> 8;
-    p[1] = value & 0xff;
-}
-
-const char* bda_to_string(const bd_addr_t bda)
-{
-    static char addr[2][18];
-
-    int core = xPortGetCoreID();
-
-    char* p = &addr[core][0];
-
-    //snprintf(p, 18, "%02x:%02x:%02x:%02x:%02x:%02x", bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
-    snprintf(p, 18, "%02x:%02x:%02x:%02x:%02x:%02x", bda[5], bda[4], bda[3], bda[2], bda[1], bda[0]);
-
-    return p;
-}
-
-uint32_t uint24_bytes_to_uint32(const uint8_t* cod)
-{
-    uint32_t uint32 = 0;
-
-    memcpy(&uint32, cod, 3);
-
-    return uint32;
-}
-
 BT_PACKET_ENVELOPE* create_packet_envelope(uint16_t packet_size)
 {
     // leave this alone!!!
@@ -416,12 +338,12 @@ BT_PACKET_ENVELOPE* create_hci_write_default_link_policy_settings_packet(uint16_
     return env;
 }
 
-BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint16_t secure_connections_host_support)
+BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint8_t secure_connections_host_support)
 {
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT, PARAMS_SIZE(HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT_PACKET));
     HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT_PACKET* packet = (HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT_PACKET*)env->packet;
 
-    packet->secure_connections_host_support  = secure_connections_host_support;
+    packet->secure_connections_host_support = secure_connections_host_support;
 
     return env;
 }

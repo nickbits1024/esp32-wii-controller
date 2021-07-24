@@ -34,7 +34,10 @@
         "semphr.h": "c",
         "esp_int_wdt.h": "c",
         "future": "c",
-        "system_error": "c"
+        "system_error": "c",
+        "types.h": "c",
+        "stdbool.h": "c",
+        "freertos.h": "c"
     },
     "idf.flashType": "UART",
     "idf.portWin": "COM3"

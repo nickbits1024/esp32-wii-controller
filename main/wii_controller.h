@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <Windows.h>
+#else
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -12,16 +16,17 @@
 #include "esp_spi_flash.h"
 #include "esp_bt.h"
 #include "esp_int_wdt.h"
+#endif
 
 //#define WII_REMOTE_HOST
 //#define WII_MITM
 
 #include "bt.h"
-#include "wii_bt.h"
+#include "bt_dump.h"
 
-void dump_packet(uint8_t io_direction, uint8_t* packet, uint16_t size);
 void wii_controller_init();
 int queue_packet_handler(uint8_t* packet, uint16_t size);
+void post_bt_packet(BT_PACKET_ENVELOPE* packet);
 
 void wii_controller_packet_handler(uint8_t* packet, uint16_t size);
 void wii_remote_packet_handler(uint8_t* packet, uint16_t size);
@@ -50,6 +55,7 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 #define HOST_SCO_BUFFER_SIZE         0xff
 #define HOST_NUM_SCO_BUFFERS         1
 
+#define WII_NAME                    "Wii"
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
 #define SDP_PSM                     0x01
 #define WII_CONTROL_PSM             0x11
@@ -103,10 +109,9 @@ typedef enum
     WII_CONSOLE_PAIRING_STARTED,
     WII_CONSOLE_PAIRING_COMPLETE,
     WII_CONSOLE_POWER_ON_PENDING,
-    WII_CONSOLE_POWER_ON_CONNECTED,
     WII_CONSOLE_POWER_OFF_PENDING,
     WII_CONSOLE_POWER_OFF_CONNECTED,
-    WII_CONSOLE_POWER_OFF_CONTROL_OPENING,
+    //WII_CONSOLE_POWER_OFF_CONTROL_OPEN,
     WII_CONSOLE_POWER_OFF_DATA_OPENING,
     WII_CONSOLE_POWER_OFF_DATA_TRANSFER,
     WII_CONSOLE_POWER_OFF_DISCONNECTING,
@@ -126,9 +131,15 @@ typedef enum
 } 
 WII_CONTROLLER_STATE;
 
+#ifdef _WINDOWS_
+#pragma pack(push, 1)
+#endif
+
 typedef struct
 {
+#ifndef _WINDOWS_
     nvs_handle_t nvs_handle;
+#endif
     WII_CONTROLLER_STATE state;
     uint16_t wii_con_handle;
     uint16_t wii_remote_con_handle;
@@ -145,7 +156,7 @@ typedef struct
     uint8_t offset_bytes[3];
     uint16_t size;
 }
-__attribute__((packed)) WII_READ_MEMORY_AND_REGISTERS_PACKET;
+_PACKED_ WII_READ_MEMORY_AND_REGISTERS_PACKET;
 
 typedef struct
 {
@@ -153,7 +164,7 @@ typedef struct
     uint8_t report_id;
     uint8_t led_flags;
 }
-__attribute__((packed)) WII_LED_PACKET;
+_PACKED_ WII_LED_PACKET;
 
 typedef struct
 {
@@ -164,7 +175,7 @@ typedef struct
     uint8_t unknown_flags_2 : 5;
     uint8_t data_report_id;
 }
-__attribute__((packed)) WII_DATA_REPORTING_MODE_PACKET;
+_PACKED_ WII_DATA_REPORTING_MODE_PACKET;
 
 typedef struct _FOUND_DEVICE
 {
@@ -172,8 +183,15 @@ typedef struct _FOUND_DEVICE
     struct _FOUND_DEVICE* next;
 } DISCOVERED_DEVICE;
 
+#ifdef _WINDOWS_
+#pragma pack(pop)
+#endif
+
+
+
 extern WII_CONTROLLER wii_controller;
-extern xSemaphoreHandle all_controller_buffers_sem;
+//extern xSemaphoreHandle all_controller_buffers_sem;
 extern bd_addr_t wii_addr;
+extern bd_addr_t device_addr;
 
 //extern portMUX_TYPE dump_mux;

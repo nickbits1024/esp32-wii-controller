@@ -124,7 +124,6 @@ void handle_wii_mitm_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACKET* pac
 
 void handle_wii_mitm_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* packet)
 {
-    printf("connection complete addr %s status 0x%02x con_handle 0x%x, link_type %u encrypted %u\n", bda_to_string(packet->addr), packet->status, packet->con_handle, packet->link_type, packet->encryption_enabled);
     if (packet->status == 0)
     {
         if (wii_controller.state == WII_MITM_CONNECTING_DUAL)
@@ -142,8 +141,8 @@ void handle_wii_mitm_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* p
                 post_bt_packet(create_hci_create_connection_packet(wii_addr, 0x8, 0, false, 0, HCI_ROLE_SLAVE));
             }
 
-            if (wii_controller.wii_con_handle != INVALID_HANDLE_VALUE && 
-                wii_controller.wii_remote_con_handle != INVALID_HANDLE_VALUE)
+            if (wii_controller.wii_con_handle != INVALID_CON_HANDLE &&
+                wii_controller.wii_remote_con_handle != INVALID_CON_HANDLE)
             {
                 wii_mitm_flush_queue();
             }
@@ -232,8 +231,8 @@ void wii_mitm_transfer_packet(uint8_t* packet, uint16_t size)
     //env->io_direction = OUTPUT_PACKET;
     memcpy(env->packet, packet, size);
 
-    if (wii_controller.wii_con_handle != INVALID_HANDLE_VALUE &&
-        wii_controller.wii_remote_con_handle != INVALID_HANDLE_VALUE)
+    if (wii_controller.wii_con_handle != INVALID_CON_HANDLE &&
+        wii_controller.wii_remote_con_handle != INVALID_CON_HANDLE)
     {
         wii_mitm_flush_queue();
 
@@ -360,7 +359,7 @@ void wii_mitm()
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
     post_bt_packet(create_hci_host_buffer_size_packet(HOST_ACL_BUFFER_SIZE, HOST_SCO_BUFFER_SIZE, HOST_NUM_ACL_BUFFERS, HOST_NUM_SCO_BUFFERS));
-    post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
+    //post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
 
     //post_bt_packet(create_hci_write_authentication_enable(1));
 

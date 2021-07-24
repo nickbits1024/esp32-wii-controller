@@ -330,6 +330,10 @@
 #define HCI_LINK_TYPE_ACL                                   1
 #define HCI_ROLE_MASTER                                     0
 #define HCI_ROLE_SLAVE                                      1
+#define HCI_MODE_ACTIVE                                     0
+#define HCI_MODE_HOLD                                       1
+#define HCI_MODE_SNIFF                                      2
+#define HCI_MODE_PARK                                       3
 
 #define HCI_LINK_POLICY_ENABLE_ROLE_SWITCH                  0x1
 #define HCI_LINK_POLICY_ENABLE_HOLD_MODE                    0x2
@@ -353,6 +357,7 @@
 
 #define L2CAP_AUTO_SIZE                 0
 
+#define L2CAP_PB_DEFAULT                ((uint16_t)0)
 #define L2CAP_PB_FIRST_FLUSH            ((uint16_t)2)
 #define L2CAP_PB_FRAGMENT               ((uint16_t)1)
 #define L2CAP_BROADCAST_NONE            ((uint16_t)0)
@@ -366,14 +371,28 @@
 #define HCI_FLOW_CONTROL_SCO            0x2
 #define HCI_FLOW_CONTROL_ACL_SCO        0x3
 
-#define INVALID_HANDLE_VALUE            0xffff
+#define INVALID_CON_HANDLE              0xffff
+
+#ifdef _WINDOWS_
+#pragma pack(push, 1)
+#endif
 
 typedef uint8_t bd_addr_t[BDA_SIZE];
 
-extern bd_addr_t device_addr;
-
 #define OUTPUT_PACKET 1
 #define INPUT_PACKET 2
+
+#define IO_DIRECTION_TAG(x)             ((x) == INPUT_PACKET ? "EVT" : "CMD")
+
+#ifdef _WINDOWS_
+typedef DWORD uint32_t;
+typedef WORD uint16_t;
+typedef BYTE uint8_t;
+typedef BOOL bool;
+#define _PACKED_
+#else
+#define _PACKED_    __attribute__((packed))
+#endif
 
 typedef struct
 {
@@ -381,15 +400,14 @@ typedef struct
     uint16_t size;
     uint8_t packet[];
 }
-__attribute__((packed)) BT_PACKET_ENVELOPE;
+_PACKED_ BT_PACKET_ENVELOPE;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint8_t data[];
 }
-__attribute__((packed)) HCI_PACKET;
+_PACKED_ HCI_PACKET;
 
 typedef struct
 {
@@ -398,7 +416,7 @@ typedef struct
     uint8_t params_size;
     uint8_t params[];
 }
-__attribute__((packed)) HCI_COMMAND_PACKET;
+_PACKED_ HCI_COMMAND_PACKET;
 
 typedef struct
 {
@@ -413,12 +431,11 @@ typedef struct
     uint32_t latency;
     uint32_t delay_variation;
 }
-__attribute__((packed)) HCI_QOS_SETUP_PACKET;
+_PACKED_ HCI_QOS_SETUP_PACKET;
 
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t op_code;
     uint8_t params_size;
@@ -426,7 +443,7 @@ typedef struct
     uint8_t duration;
     uint8_t num_responses;
 }
-__attribute__((packed)) HCI_INQUIRY_PACKET;
+_PACKED_ HCI_INQUIRY_PACKET;
 
 typedef struct
 {
@@ -435,7 +452,7 @@ typedef struct
     uint8_t params_size;
     uint8_t flow_control_enable;
 }
-__attribute__((packed)) HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL_PACKET;
+_PACKED_ HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL_PACKET;
 
 typedef struct
 {
@@ -445,7 +462,7 @@ typedef struct
     uint8_t number_of_handles;
     uint8_t data[];
 }
-__attribute__((packed)) HCI_HOST_NUMBER_OF_COMPLETED_PACKETS_PACKET;
+_PACKED_ HCI_HOST_NUMBER_OF_COMPLETED_PACKETS_PACKET;
 
 typedef struct
 {
@@ -457,7 +474,7 @@ typedef struct
     uint16_t host_total_num_acl_data_packets;
     uint16_t host_total_num_synchronous_data_packets;
 }
-__attribute__((packed)) HCI_HOST_BUFFER_SIZE_PACKET;
+_PACKED_ HCI_HOST_BUFFER_SIZE_PACKET;
 
 // typedef struct
 // {
@@ -466,7 +483,7 @@ __attribute__((packed)) HCI_HOST_BUFFER_SIZE_PACKET;
 //     uint8_t params_size;
 //     uint8_t flow_control_enable;
 // }
-// __attribute__((packed)) HCI_HOST_NUMBER_OF_COMPLETED_PACKETS_PACKET;
+// _PACKED_ HCI_HOST_NUMBER_OF_COMPLETED_PACKETS_PACKET;
 
 typedef struct
 {
@@ -475,7 +492,7 @@ typedef struct
     uint8_t params_size;
     uint8_t pin_type;
 }
-__attribute__((packed)) HCI_WRITE_PIN_TYPE_PACKET;
+_PACKED_ HCI_WRITE_PIN_TYPE_PACKET;
 
 typedef struct
 {
@@ -486,7 +503,7 @@ typedef struct
     uint8_t pin_code_size;
     uint8_t pin_code[HCI_MAX_PIN_CODE_SIZE];
 }
-__attribute__((packed)) HCI_PIN_CODE_REQUEST_REPLY_PACKET;
+_PACKED_ HCI_PIN_CODE_REQUEST_REPLY_PACKET;
 
 typedef struct
 {
@@ -495,11 +512,10 @@ typedef struct
     uint8_t params_size;
     bd_addr_t addr;
 }
-__attribute__((packed)) HCI_PIN_CODE_REQUEST_NEGATIVE_REPLY_PACKET;
+_PACKED_ HCI_PIN_CODE_REQUEST_NEGATIVE_REPLY_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t op_code;
     uint8_t params_size;
@@ -508,7 +524,7 @@ typedef struct
     uint8_t reserved;
     uint16_t clock_offset;
 }
-__attribute__((packed)) HCI_REMOTE_NAME_REQUEST_PACKET;
+_PACKED_ HCI_REMOTE_NAME_REQUEST_PACKET;
 
 typedef struct
 {
@@ -517,7 +533,7 @@ typedef struct
     uint8_t params_size;
     uint16_t con_handle;
 }
-__attribute__((packed)) HCI_READ_REMOTE_SUPPORTED_FEATURES_PACKET;
+_PACKED_ HCI_READ_REMOTE_SUPPORTED_FEATURES_PACKET;
 
 typedef struct
 {
@@ -526,11 +542,10 @@ typedef struct
     uint8_t params_size;
     uint16_t con_handle;
 }
-__attribute__((packed)) HCI_EXIT_PARK_STATE_PACKET;
+_PACKED_ HCI_EXIT_PARK_STATE_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t op_code;
     uint8_t params_size;
@@ -541,18 +556,17 @@ typedef struct
     uint16_t clock_offset;
     uint8_t allow_role_switch;
 }
-__attribute__((packed)) HCI_CREATE_CONNECTION_PACKET;
+_PACKED_ HCI_CREATE_CONNECTION_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t op_code;
     uint8_t params_size;
     bd_addr_t addr;
     uint8_t role;
 }
-__attribute__((packed)) HCI_SWITCH_ROLE_PACKET;
+_PACKED_ HCI_SWITCH_ROLE_PACKET;
 
 typedef struct
 {
@@ -562,7 +576,7 @@ typedef struct
     uint16_t con_handle;
     uint8_t reason;
 }
-__attribute__((packed)) HCI_DISCONNECT_PACKET;
+_PACKED_ HCI_DISCONNECT_PACKET;
 
 typedef struct
 {
@@ -571,7 +585,7 @@ typedef struct
     uint8_t params_size;
     uint8_t class_of_device[3];
 }
-__attribute__((packed)) HCI_WRITE_CLASS_OF_DEVICE_PACKET;
+_PACKED_ HCI_WRITE_CLASS_OF_DEVICE_PACKET;
 
 typedef struct
 {
@@ -580,7 +594,7 @@ typedef struct
     uint8_t params_size;
     uint8_t local_name[HCI_MAX_LOCAL_NAME_SIZE];
 }
-__attribute__((packed)) HCI_WRITE_LOCAL_NAME_PACKET;
+_PACKED_ HCI_WRITE_LOCAL_NAME_PACKET;
 
 typedef struct
 {
@@ -589,7 +603,7 @@ typedef struct
     uint8_t params_size;
     uint16_t con_handle;
 }
-__attribute__((packed)) HCI_AUTHENTICATION_REQUESTED_PACKET;
+_PACKED_ HCI_AUTHENTICATION_REQUESTED_PACKET;
 
 typedef struct
 {
@@ -598,7 +612,7 @@ typedef struct
     uint8_t params_size;
     uint8_t encryption_mode;
 }
-__attribute__((packed)) HCI_WRITE_ENCRYPTION_MODE_PACKET;
+_PACKED_ HCI_WRITE_ENCRYPTION_MODE_PACKET;
 
 
 typedef struct
@@ -608,7 +622,7 @@ typedef struct
     uint8_t params_size;
     bd_addr_t addr;
 }
-__attribute__((packed)) HCI_LINK_KEY_REQUEST_PACKET;
+_PACKED_ HCI_LINK_KEY_REQUEST_PACKET;
 
 typedef struct
 {
@@ -618,7 +632,7 @@ typedef struct
     bd_addr_t addr;
     uint8_t link_key[HCI_LINK_KEY_SIZE];
 }
-__attribute__((packed)) HCI_LINK_KEY_REQUEST_REPLY_PACKET;
+_PACKED_ HCI_LINK_KEY_REQUEST_REPLY_PACKET;
 
 typedef struct
 {
@@ -627,7 +641,7 @@ typedef struct
     uint8_t params_size;
     bd_addr_t addr;
 }
-__attribute__((packed)) HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY_PACKET;
+_PACKED_ HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY_PACKET;
 
 typedef struct
 {
@@ -636,7 +650,7 @@ typedef struct
     uint8_t params_size;
     uint8_t scan_enable;
 }
-__attribute__((packed)) HCI_WRITE_SCAN_ENABLE_PACKET;
+_PACKED_ HCI_WRITE_SCAN_ENABLE_PACKET;
 
 typedef struct
 {
@@ -645,7 +659,7 @@ typedef struct
     uint8_t params_size;
     uint8_t authentication_enable;
 }
-__attribute__((packed)) HCI_WRITE_AUTHENTICATION_ENABLE_PACKET;
+_PACKED_ HCI_WRITE_AUTHENTICATION_ENABLE_PACKET;
 
 typedef struct
 {
@@ -655,7 +669,7 @@ typedef struct
     uint16_t con_handle;
     uint8_t encryption_enable;
 }
-__attribute__((packed)) HCI_SET_CONNECTION_ENCRYPTION_PACKET;
+_PACKED_ HCI_SET_CONNECTION_ENCRYPTION_PACKET;
 
 typedef struct
 {
@@ -664,7 +678,7 @@ typedef struct
     uint8_t params_size;
     uint16_t default_link_policy_settings;
 }
-__attribute__((packed)) HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_PACKET;
+_PACKED_ HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_PACKET;
 
 typedef struct
 {
@@ -673,7 +687,7 @@ typedef struct
     uint8_t params_size;
     uint8_t secure_connections_host_support;
 }
-__attribute__((packed)) HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT_PACKET;
+_PACKED_ HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT_PACKET;
 
 typedef struct
 {
@@ -683,7 +697,7 @@ typedef struct
     uint8_t num_current_iac;
     uint8_t iac_lap[3];
 }
-__attribute__((packed)) HCI_WRITE_CURRENT_IAC_LAP_PACKET;
+_PACKED_ HCI_WRITE_CURRENT_IAC_LAP_PACKET;
 
 typedef struct
 {
@@ -693,7 +707,7 @@ typedef struct
     bd_addr_t addr;
     uint8_t role;
 }
-__attribute__((packed)) HCI_ACCEPT_CONNECTION_REQUEST_PACKET;
+_PACKED_ HCI_ACCEPT_CONNECTION_REQUEST_PACKET;
 
 typedef struct
 {
@@ -703,7 +717,17 @@ typedef struct
     bd_addr_t addr;
     uint8_t reason;
 }
-__attribute__((packed)) HCI_REJECT_CONNECTION_REQUEST_PACKET;
+_PACKED_ HCI_REJECT_CONNECTION_REQUEST_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+}
+_PACKED_ HCI_COMMAND_COMPLETE_EVENT_PACKET;
 
 typedef struct
 {
@@ -714,7 +738,7 @@ typedef struct
     uint16_t op_code;
     uint8_t status;
 }
-__attribute__((packed)) HCI_RESET_COMPLETE_PACKET;
+_PACKED_ HCI_RESET_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -725,7 +749,7 @@ typedef struct
     uint16_t op_code;
     uint8_t status;
 }
-__attribute__((packed)) HCI_HOST_BUFFER_SIZE_COMPLETE_PACKET;
+_PACKED_ HCI_HOST_BUFFER_SIZE_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -740,7 +764,7 @@ typedef struct
     uint16_t hc_total_num_acl_data_packets;
     uint16_t hc_total_num_synchronous_data_packets;
 }
-__attribute__((packed)) HCI_READ_BUFFER_SIZE_COMPLETE_PACKET;
+_PACKED_ HCI_READ_BUFFER_SIZE_COMPLETE_PACKET;
 
 
 typedef struct
@@ -753,7 +777,7 @@ typedef struct
     uint8_t status;
     uint8_t local_name[HCI_MAX_LOCAL_NAME_SIZE];
 }
-__attribute__((packed)) HCI_READ_LOCAL_NAME_COMPLETE_PACKET;
+_PACKED_ HCI_READ_LOCAL_NAME_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -764,63 +788,7 @@ typedef struct
     uint16_t op_code;
     uint8_t status;
 }
-__attribute__((packed)) HCI_WRITE_PIN_TYPE_COMPLETE_PACKET;
-
-typedef struct
-{
-    uint8_t type;
-    uint8_t event_code;
-    uint8_t params_size;
-    uint8_t num_hci_command_packets;
-    uint16_t op_code;
-    uint8_t status;
-    bd_addr_t addr;
-}
-__attribute__((packed)) HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET;
-
-typedef struct
-{
-    uint8_t type;
-    uint8_t event_code;
-    uint8_t params_size;
-    uint8_t num_hci_command_packets;
-    uint16_t op_code;
-    uint8_t status;
-}
-__attribute__((packed)) HCI_WRITE_AUTHENTICATION_ENABLE_COMPLETE_PACKET;
-
-typedef struct
-{
-    uint8_t type;
-    uint8_t event_code;
-    uint8_t params_size;
-    uint8_t num_hci_command_packets;
-    uint16_t op_code;
-    uint8_t status;
-}
-__attribute__((packed)) HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET;
-
-typedef struct
-{
-    uint8_t type;
-    uint8_t event_code;
-    uint8_t params_size;
-    uint8_t num_hci_command_packets;
-    uint16_t op_code;
-    uint8_t status;
-}
-__attribute__((packed)) HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET;
-
-typedef struct
-{
-    uint8_t type;
-    uint8_t event_code;
-    uint8_t params_size;
-    uint8_t num_hci_command_packets;
-    uint16_t op_code;
-    uint8_t status;
-}
-__attribute__((packed)) HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMPLETE_PACKET;
+_PACKED_ HCI_WRITE_PIN_TYPE_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -832,7 +800,7 @@ typedef struct
     uint8_t status;
     bd_addr_t addr;
 }
-__attribute__((packed)) HCI_AUTH_CODE_COMPLETE_PACKET;
+_PACKED_ HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -843,7 +811,7 @@ typedef struct
     uint16_t op_code;
     uint8_t status;
 }
-__attribute__((packed)) HCI_WRITE_LOCAL_NAME_COMPLETE_PACKET;
+_PACKED_ HCI_WRITE_AUTHENTICATION_ENABLE_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -854,7 +822,7 @@ typedef struct
     uint16_t op_code;
     uint8_t status;
 }
-__attribute__((packed)) HCI_WRITE_CLASS_OF_DEVICE_COMPLETE_PACKET;
+_PACKED_ HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -865,7 +833,7 @@ typedef struct
     uint16_t op_code;
     uint8_t status;
 }
-__attribute__((packed)) HCI_WRITE_CURRENT_IAC_LAP_COMPLETE_PACKET;
+_PACKED_ HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -876,7 +844,63 @@ typedef struct
     uint16_t op_code;
     uint8_t status;
 }
-__attribute__((packed)) HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET;
+_PACKED_ HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
+    bd_addr_t addr;
+}
+_PACKED_ HCI_AUTH_CODE_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
+}
+_PACKED_ HCI_WRITE_LOCAL_NAME_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
+}
+_PACKED_ HCI_WRITE_CLASS_OF_DEVICE_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
+}
+_PACKED_ HCI_WRITE_CURRENT_IAC_LAP_COMPLETE_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+    uint8_t status;
+}
+_PACKED_ HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -888,7 +912,7 @@ typedef struct
     uint8_t status;
     uint8_t simple_pairing_mode;
 }
-__attribute__((packed)) HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET;
+_PACKED_ HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET;
 
 typedef struct
 {
@@ -896,7 +920,18 @@ typedef struct
     uint8_t event_code;
     uint8_t params_size;
 }
-__attribute__((packed)) HCI_EVENT_PACKET;
+_PACKED_ HCI_EVENT_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint8_t event_code;
+    uint8_t params_size;
+    uint8_t status;
+    uint8_t num_hci_command_packets;
+    uint16_t op_code;
+}
+_PACKED_ HCI_COMMAND_STATUS_EVENT_PACKET;
 
 typedef struct
 {
@@ -912,7 +947,7 @@ typedef struct
     uint32_t latency;
     uint32_t delay_variation;
 }
-__attribute__((packed)) HCI_QOS_SETUP_COMPLETE_EVENT_PACKET;
+_PACKED_ HCI_QOS_SETUP_COMPLETE_EVENT_PACKET;
 
 typedef struct
 {
@@ -924,7 +959,7 @@ typedef struct
     uint8_t current_mode;
     uint16_t interval;
 }
-__attribute__((packed)) HCI_MODE_CHANGE_EVENT_PACKET;
+_PACKED_ HCI_MODE_CHANGE_EVENT_PACKET;
 
 typedef struct
 {
@@ -935,7 +970,7 @@ typedef struct
     uint16_t con_handle;
     uint8_t encryption_enabled;
 }
-__attribute__((packed)) HCI_ENCRYPTION_CHANGE_EVENT_PACKET;
+_PACKED_ HCI_ENCRYPTION_CHANGE_EVENT_PACKET;
 
 typedef struct
 {
@@ -946,7 +981,7 @@ typedef struct
     uint16_t con_handle;
     uint8_t reason;
 }
-__attribute__((packed)) HCI_DISCONNECTION_COMPLETE_EVENT_PACKET;
+_PACKED_ HCI_DISCONNECTION_COMPLETE_EVENT_PACKET;
 
 // event packets
 typedef struct
@@ -956,7 +991,7 @@ typedef struct
     uint8_t params_size;
     bd_addr_t addr;
 }
-__attribute__((packed)) HCI_LINK_KEY_REQUEST_EVENT_PACKET;
+_PACKED_ HCI_LINK_KEY_REQUEST_EVENT_PACKET;
 
 typedef struct
 {
@@ -967,7 +1002,7 @@ typedef struct
     bd_addr_t addr;
     uint8_t new_role;
 }
-__attribute__((packed)) HCI_ROLE_CHANGE_EVENT_PACKET;
+_PACKED_ HCI_ROLE_CHANGE_EVENT_PACKET;
 
 typedef struct
 {
@@ -980,7 +1015,7 @@ typedef struct
     uint8_t link_type;
     uint8_t encryption_enabled;
 }
-__attribute__((packed)) HCI_CONNECTION_COMPLETE_EVENT_PACKET;
+_PACKED_ HCI_CONNECTION_COMPLETE_EVENT_PACKET;
 
 typedef struct
 {
@@ -990,7 +1025,7 @@ typedef struct
     uint16_t con_handle;
     uint8_t lmp_max_slots;
 }
-__attribute__((packed)) HCI_EVENT_MAX_SLOTS_CHANGED_EVENT_PACKET;
+_PACKED_ HCI_EVENT_MAX_SLOTS_CHANGED_EVENT_PACKET;
 
 typedef struct
 {
@@ -1001,7 +1036,7 @@ typedef struct
     uint8_t link_key[HCI_LINK_KEY_SIZE];
     uint8_t key_type;
 }
-__attribute__((packed)) HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET;
+_PACKED_ HCI_LINK_KEY_NOTIFICATION_EVENT_PACKET;
 
 typedef struct
 {
@@ -1012,7 +1047,7 @@ typedef struct
     uint8_t class_of_device[3];
     uint8_t link_type;
 }
-__attribute__((packed)) HCI_CONNECTION_REQUEST_EVENT_PACKET;
+_PACKED_ HCI_CONNECTION_REQUEST_EVENT_PACKET;
 
 typedef struct
 {
@@ -1022,7 +1057,7 @@ typedef struct
     uint8_t status;
     uint16_t con_handle;
 }
-__attribute__((packed)) HCI_AUTHENTICATION_COMPLETE_EVENT_PACKET;
+_PACKED_ HCI_AUTHENTICATION_COMPLETE_EVENT_PACKET;
 
 typedef struct
 {
@@ -1031,11 +1066,10 @@ typedef struct
     uint8_t params_size;
     bd_addr_t addr;
 }
-__attribute__((packed)) HCI_PIN_CODE_REQUEST_EVENT_PACKET;
+_PACKED_ HCI_PIN_CODE_REQUEST_EVENT_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t con_handle : 12;
     uint16_t packet_boundary_flag : 2;
@@ -1043,11 +1077,10 @@ typedef struct
     uint16_t hci_acl_size;
     uint8_t data[];
 }
-__attribute__((packed)) HCI_ACL_PACKET;
+_PACKED_ HCI_ACL_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t con_handle : 12;
     uint16_t packet_boundary_flag : 2;
@@ -1057,11 +1090,10 @@ typedef struct
     uint16_t channel;
     uint8_t data[];
 } 
-__attribute__((packed)) L2CAP_PACKET;
+_PACKED_ L2CAP_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t con_handle : 12;
     uint16_t packet_boundary_flag : 2;
@@ -1074,11 +1106,10 @@ typedef struct
     uint16_t params_size;
     uint8_t data[];
 } 
-__attribute__((packed)) L2CAP_SDP_PACKET;
+_PACKED_ L2CAP_SDP_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t con_handle : 12;
     uint16_t packet_boundary_flag : 2;
@@ -1092,7 +1123,7 @@ typedef struct
     uint16_t payload_size;
     uint8_t payload[];
 }
-__attribute__((packed)) L2CAP_SIGNAL_CHANNEL_PACKET;
+_PACKED_ L2CAP_SIGNAL_CHANNEL_PACKET;
 
 typedef struct
 {
@@ -1111,7 +1142,7 @@ typedef struct
     uint16_t psm;
     uint16_t source_cid;
 } 
-__attribute__((packed)) L2CAP_CONNECTION_REQUEST_PACKET;
+_PACKED_ L2CAP_CONNECTION_REQUEST_PACKET;
 
 typedef struct
 {
@@ -1132,11 +1163,10 @@ typedef struct
     uint16_t result;
     uint16_t status;
 }
-__attribute__((packed)) L2CAP_CONNECTION_RESPONSE_PACKET;
+_PACKED_ L2CAP_CONNECTION_RESPONSE_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t con_handle : 12;
     uint16_t packet_boundary_flag : 2;
@@ -1154,11 +1184,10 @@ typedef struct
 
     uint8_t options[];
 } 
-__attribute__((packed)) L2CAP_CONFIG_REQUEST_PACKET;
+_PACKED_ L2CAP_CONFIG_REQUEST_PACKET;
 
 typedef struct
 {
-    //uint16_t size;
     uint8_t type;
     uint16_t con_handle : 12;
     uint16_t packet_boundary_flag : 2;
@@ -1178,14 +1207,14 @@ typedef struct
 
     uint8_t options[];
 } 
-__attribute__((packed)) L2CAP_CONFIG_RESPONSE_PACKET;
+_PACKED_ L2CAP_CONFIG_RESPONSE_PACKET;
 
 typedef struct
 {
     uint8_t type;
     uint8_t size;
 }
-__attribute__((packed)) L2CAP_CONFIG_OPTION;
+_PACKED_ L2CAP_CONFIG_OPTION;
 
 typedef struct
 {
@@ -1193,7 +1222,7 @@ typedef struct
     uint8_t size;
     uint16_t mtu;
 }
-__attribute__((packed)) L2CAP_CONFIG_MTU_OPTION;
+_PACKED_ L2CAP_CONFIG_MTU_OPTION;
 
 typedef struct
 {
@@ -1201,7 +1230,7 @@ typedef struct
     uint8_t size;
     uint16_t flush_timeout;
 }
-__attribute__((packed)) L2CAP_CONFIG_FLUSH_TIMEOUT_OPTION;
+_PACKED_ L2CAP_CONFIG_FLUSH_TIMEOUT_OPTION;
 
 
 #define L2CAP_CONFIG_MTU_OPTION_TYPE              1
@@ -1224,7 +1253,7 @@ typedef struct
     uint16_t dest_cid;
     uint16_t source_cid;
 }
-__attribute__((packed)) L2CAP_DISCONNECTION_REQUEST_PACKET;
+_PACKED_ L2CAP_DISCONNECTION_REQUEST_PACKET;
 
 typedef struct
 {
@@ -1243,7 +1272,7 @@ typedef struct
     uint16_t dest_cid;
     uint16_t source_cid;
 }
-__attribute__((packed)) L2CAP_DISCONNECTION_RESPONSE_PACKET;
+_PACKED_ L2CAP_DISCONNECTION_RESPONSE_PACKET;
 
 typedef struct
 {
@@ -1262,7 +1291,7 @@ typedef struct
     uint16_t reason;
     uint8_t data[];
 }
-__attribute__((packed)) L2CAP_COMMAND_REJECT_PACKET;
+_PACKED_ L2CAP_COMMAND_REJECT_PACKET;
 
 typedef struct
 {
@@ -1270,17 +1299,15 @@ typedef struct
     uint8_t report_id;
     uint8_t data[];
 } 
-__attribute__((packed)) HID_REPORT_PACKET;
+_PACKED_ HID_REPORT_PACKET;
+
+#ifdef _WINDOWS_
+#pragma pack(pop)
+#endif
 
 //void reverse_bda(bd_addr_t bda);
 //void read_bda(const uint8_t* p, bd_addr_t bda);
 //void write_bda(uint8_t* p, const bd_addr_t bda);
-uint16_t read_uint16(uint8_t* p);
-uint16_t read_uint16_be(uint8_t* p);
-uint32_t read_uint24(const uint8_t* p);
-const char* bda_to_string(const bd_addr_t bda);
-uint32_t uint24_bytes_to_uint32(const uint8_t* cod);
-
 void write_uint16_be(uint8_t* p, uint16_t value);
 
 #define PARAMS_SIZE(a) (sizeof(a) - sizeof(HCI_COMMAND_PACKET))
@@ -1316,7 +1343,7 @@ BT_PACKET_ENVELOPE* create_hci_read_remote_supported_features_packet(uint16_t co
 BT_PACKET_ENVELOPE* create_hci_write_local_name(char* local_name);
 BT_PACKET_ENVELOPE* create_hci_current_iac_lap_packet(uint32_t iac_lap);
 BT_PACKET_ENVELOPE* create_hci_write_default_link_policy_settings_packet(uint16_t default_link_policy_settings);
-BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint16_t secure_connections_host_support);
+BT_PACKET_ENVELOPE* create_hci_secure_connections_host_support_packet(uint8_t secure_connections_host_support);
 BT_PACKET_ENVELOPE* create_hci_qos_setup_packet(uint16_t con_handle, uint8_t flags, uint8_t service_type, uint32_t token_rate, uint32_t peak_bandwidth, uint32_t latency, uint32_t delay_variation);
 
 BT_PACKET_ENVELOPE* create_acl_packet(uint16_t con_handle, uint16_t channel, uint8_t packet_boundary_flag, uint8_t broadcast_flag, const uint8_t* data, uint16_t data_size);
