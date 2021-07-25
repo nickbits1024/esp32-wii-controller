@@ -37,6 +37,7 @@ void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PA
                 break;
             case WII_CONSOLE_POWER_OFF_PENDING:
                 wii_controller.state = WII_CONSOLE_POWER_OFF_CONNECTED;
+                open_control_channel(packet->con_handle);
                 break;
             case WII_CONSOLE_POWER_ON_PENDING:
                 post_bt_packet(create_hci_disconnect_packet(packet->con_handle, ERROR_CODE_REMOTE_DEVICE_TERMINATED_CONNECTION_DUE_TO_POWER_OFF));
@@ -604,6 +605,14 @@ void handle_fake_wii_mode_change(HCI_MODE_CHANGE_EVENT_PACKET* packet)
 {
     switch (wii_controller.state)
     {
+    case WII_CONSOLE_PAIRING_STARTED:
+        if (packet->current_mode == HCI_MODE_SNIFF)
+        {
+            wii_controller.state = WII_CONSOLE_PAIRING_COMPLETE;
+            printf("pairing complete!\n");
+            send_disconnect(packet->con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION);
+        }
+        break;
     case WII_CONSOLE_POWER_OFF_CONNECTED:
         if (packet->current_mode == HCI_MODE_SNIFF)
         {
