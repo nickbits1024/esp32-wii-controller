@@ -623,6 +623,8 @@ void wii_remote_host()
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
     post_bt_packet(create_hci_write_class_of_device_packet(WII_COD));
     post_bt_packet(create_hci_write_local_name(WII_NAME));
+    post_bt_packet(create_hci_host_buffer_size_packet(HOST_ACL_BUFFER_SIZE, HOST_SCO_BUFFER_SIZE, HOST_NUM_ACL_BUFFERS, HOST_NUM_SCO_BUFFERS));
+    post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
 
     wii_controller.state = WII_REMOTE_CONNECTION_PENDING;
     find_wii_remote();

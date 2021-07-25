@@ -23,9 +23,10 @@ xSemaphoreHandle output_queue_ready_sem;
 //xQueueHandle input_queue_handle;
 xQueueHandle queue_handle;
 xSemaphoreHandle all_controller_buffers_sem;
-xSemaphoreHandle controller_buffers_sem[2];
+//xSemaphoreHandle controller_buffers_sem[2];
 #endif
-int controller_buffers_sem_count[2];
+int all_controller_buffers_sem_count;
+//int controller_buffers_sem_count[2];
 bd_addr_t device_addr;
 bd_addr_t wii_addr;
 //portMUX_TYPE dump_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -34,21 +35,21 @@ void peek_number_of_completed_packets(uint8_t* packet, uint16_t size);
 
 #ifndef _WINDOWS_
 
-xSemaphoreHandle get_queue_sem(uint16_t con_handle, int add)
-{
-    if (con_handle == wii_controller.wii_con_handle)
-    {
-        controller_buffers_sem_count[0] += add;
-        return controller_buffers_sem[0];
-    }
-    else if (con_handle == wii_controller.wii_remote_con_handle)
-    {
-        controller_buffers_sem_count[1] += add;
-        return controller_buffers_sem[1];
-    }
-    printf("no queue for handle 0x%x\n", con_handle);
-    abort();
-}
+// xSemaphoreHandle get_queue_sem(uint16_t con_handle, int add)
+// {
+//     if (con_handle == wii_controller.wii_con_handle)
+//     {
+//         controller_buffers_sem_count[0] += add;
+//         return controller_buffers_sem[0];
+//     }
+//     else if (con_handle == wii_controller.wii_remote_con_handle)
+//     {
+//         controller_buffers_sem_count[1] += add;
+//         return controller_buffers_sem[1];
+//     }
+//     printf("no queue for handle 0x%x\n", con_handle);
+//     abort();
+// }
 
 void queue_io_task(void* p)
 {
@@ -59,10 +60,6 @@ void queue_io_task(void* p)
 
         if (xQueueReceive(queue_handle, &env, portMAX_DELAY) == pdPASS)
         {
-            multi_heap_info_t heap_info;
-            heap_caps_get_info(&heap_info, MALLOC_CAP_INTERNAL);
-
-
             dump_packet(env->io_direction, env->packet, env->size);
 
             HCI_PACKET* hci_packet = (HCI_PACKET*)env->packet;
@@ -71,16 +68,18 @@ void queue_io_task(void* p)
             {
                 if (hci_packet->type == HCI_ACL_PACKET_TYPE)
                 {
-                    HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)hci_packet;
+                    //HCI_ACL_PACKET* acl_packet = (HCI_ACL_PACKET*)hci_packet;
                     if (first_acl_send)
                     {
                         xSemaphoreTake(output_queue_ready_sem, portMAX_DELAY);
                         first_acl_send = false;
                     }
-                    printf("acl take con_handle 0x%x wii %u wii remote %u free %u alloc %u..\n", acl_packet->con_handle, controller_buffers_sem_count[0], controller_buffers_sem_count[1], heap_info.total_free_bytes, heap_info.total_allocated_bytes);
-                    xSemaphoreTake(get_queue_sem(acl_packet->con_handle, -1), portMAX_DELAY);
-                    //xSemaphoreTake(all_controller_buffers_sem, portMAX_DELAY);
-                    printf("acl taken...\n");
+                    //printf("acl take con_handle 0x%x wii %u wii remote %u..\n", acl_packet->con_handle, controller_buffers_sem_count[0], controller_buffers_sem_count[1]);
+                    //xSemaphoreTake(get_queue_sem(acl_packet->con_handle, -1), portMAX_DELAY);
+                    //printf("acl take con_handle 0x%x all %u\n", acl_packet->con_handle, all_controller_buffers_sem_count);
+                    xSemaphoreTake(all_controller_buffers_sem, portMAX_DELAY);
+                    all_controller_buffers_sem_count--;
+                    //printf("acl taken...\n");
                 }
 
                 while (!esp_vhci_host_check_send_available());
@@ -208,11 +207,12 @@ void handle_read_buffer_size_complete(HCI_READ_BUFFER_SIZE_COMPLETE_PACKET* pack
     if (all_controller_buffers_sem == NULL)
     {
         int all_slots = packet->hc_total_num_acl_data_packets;
-        int slots = all_slots / 2;
-        controller_buffers_sem[0] = xSemaphoreCreateCounting(slots, slots);
-        controller_buffers_sem[1] = xSemaphoreCreateCounting(slots, slots);
-        controller_buffers_sem_count[0] = slots;
-        controller_buffers_sem_count[1] = slots;
+        // int slots = all_slots / 2;
+        // controller_buffers_sem[0] = xSemaphoreCreateCounting(slots, slots);
+        // controller_buffers_sem[1] = xSemaphoreCreateCounting(slots, slots);
+        // controller_buffers_sem_count[0] = slots;
+        // controller_buffers_sem_count[1] = slots;
+        all_controller_buffers_sem_count = all_slots;
         all_controller_buffers_sem = xSemaphoreCreateCounting(all_slots, all_slots);
 
         xSemaphoreGive(output_queue_ready_sem);
@@ -224,66 +224,12 @@ void handle_command_complete(uint8_t* packet, uint16_t size)
     uint16_t op_code = read_uint16(packet + 4);
     switch (op_code)
     {
-        // case HCI_OPCODE_RESET:
-        //     handle_reset_complete((HCI_RESET_COMPLETE_PACKET*)packet);
-        //     break;
         case HCI_OPCODE_READ_BD_ADDR:
             handle_read_bd_addr_complete((HCI_AUTH_READ_BD_ADDR_COMPLETE_PACKET*)packet);
             break;
         case HCI_OPCODE_READ_BUFFER_SIZE:
             handle_read_buffer_size_complete((HCI_READ_BUFFER_SIZE_COMPLETE_PACKET*)packet);
             break;
-        // case HCI_OPCODE_READ_LOCAL_NAME:
-        //     handle_read_local_name_complete((HCI_READ_LOCAL_NAME_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_READ_SIMPLE_PAIRING_MODE:
-        //     handle_read_simple_pairing_mode_complete((HCI_READ_SIMPLE_PAIRING_MODE_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_PIN_CODE_REQUEST_REPLY:
-        //     handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_reply");
-        //     break;
-        // case HCI_OPCODE_PIN_CODE_REQUEST_NEGATIVE_REPLY:
-        //     handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_pin_code_request_negative_reply");
-        //     break;
-        // case HCI_OPCODE_LINK_KEY_REQUEST_REPLY:
-        //     handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_reply");
-        //     break;
-        // case HCI_OPCODE_LINK_KEY_REQUEST_NEGATIVE_REPLY:
-        //     handle_auth_code_complete((HCI_AUTH_CODE_COMPLETE_PACKET*)packet, "hci_link_key_request_negative_reply");
-        //     break;
-        // case HCI_OPCODE_WRITE_SCAN_ENABLE:
-        //     handle_write_scan_enable_complete((HCI_WRITE_SCAN_ENABLE_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_WRITE_CLASS_OF_DEVICE:
-        //     handle_write_class_of_device_complete((HCI_WRITE_CLASS_OF_DEVICE_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_WRITE_LOCAL_NAME:
-        //     handle_write_local_name_complete((HCI_WRITE_LOCAL_NAME_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_WRITE_CURRENT_IAC_LAP:
-        //     handle_write_current_iac_lap_complete((HCI_WRITE_CURRENT_IAC_LAP_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_WRITE_AUTHENTICATION_ENABLE:
-        //     handle_write_authentication_enable_complete((HCI_WRITE_AUTHENTICATION_ENABLE_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_SET_CONNECTION_ENCRYPTION:
-        //     printf("set_connection_encryption complete\n"); // no params
-        //     break;
-        // case HCI_OPCODE_WRITE_DEFAULT_LINK_POLICY_SETTINGS:
-        //     handle_write_default_link_policy_settings_complete((HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT:
-        //     handle_write_secure_connections_host_support_complete((HCI_WRITE_SECURE_CONNECTION_HOST_SUPPORT_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_WRITE_PIN_TYPE:
-        //     handle_write_pin_type((HCI_WRITE_PIN_TYPE_COMPLETE_PACKET*)packet);
-        //     break;
-        // case HCI_OPCODE_WRITE_ENCRYPTION_MODE:
-        //     handle_write_encryption_mode_complete((HCI_WRITE_ENCRYPTION_MODE_COMPLETE_PACKET*)packet);
-        //     break;
-        // default:
-        //     printf("unhandled command complete 0x%04x\n", op_code);
-        //     break;
     }
 }
 
@@ -296,14 +242,15 @@ void peek_number_of_completed_packets(uint8_t* packet, uint16_t size)
         uint16_t con_handle = read_uint16(p);
         uint16_t num_completed = read_uint16(p + 2);
 
-        printf("peek number_of_completed_packets handle 0x%x completed %u\n", con_handle, num_completed);
+        //printf("peek number_of_completed_packets handle 0x%x completed %u\n", con_handle, num_completed);
 
         xSemaphoreGive(all_controller_buffers_sem);
+        all_controller_buffers_sem_count++;
 
-        for (int j = 0; j < num_completed; j++)
-        {
-            xSemaphoreGive(get_queue_sem(con_handle, 1));
-        }
+        // for (int j = 0; j < num_completed; j++)
+        // {
+        //     xSemaphoreGive(get_queue_sem(con_handle, 1));
+        // }
 
         p += 4;
     }

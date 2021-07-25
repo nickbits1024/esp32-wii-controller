@@ -553,10 +553,20 @@ typedef struct
     uint16_t packet_type;
     uint8_t psrm;
     uint8_t reserved;
-    uint16_t clock_offset;
+    uint16_t clock_offset : 15;
+    uint16_t clock_offset_valid : 1;
     uint8_t allow_role_switch;
 }
 _PACKED_ HCI_CREATE_CONNECTION_PACKET;
+
+typedef struct
+{
+    uint8_t type;
+    uint16_t op_code;
+    uint8_t params_size;
+    bd_addr_t addr;
+}
+_PACKED_ HCI_CREATE_CONNECTION_CANCEL_PACKET;
 
 typedef struct
 {
@@ -1323,6 +1333,7 @@ BT_PACKET_ENVELOPE* create_hci_inquiry_cancel_packet();
 BT_PACKET_ENVELOPE* create_hci_inquiry_packet(uint32_t lap, uint8_t duration, uint8_t num_responses);
 BT_PACKET_ENVELOPE* create_hci_remote_name_request_packet(const bd_addr_t addr, uint8_t psrm, bool clock_offset_valid, uint16_t clock_offset);
 BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, uint16_t packet_type, uint8_t psrm, bool clock_offset_valid, uint16_t clock_offset, uint8_t allow_role_switch);
+BT_PACKET_ENVELOPE* create_hci_create_connection_cancel_packet(const bd_addr_t addr);
 BT_PACKET_ENVELOPE* create_hci_switch_role_packet(const bd_addr_t addr, uint8_t role);
 BT_PACKET_ENVELOPE* create_hci_authentication_requested_packet(uint16_t con_handle);
 BT_PACKET_ENVELOPE* create_hci_link_key_request_reply_packet(const bd_addr_t addr, const uint8_t* link_key);

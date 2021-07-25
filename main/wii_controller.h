@@ -57,6 +57,7 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
 #define WII_NAME                    "Wii"
 #define WII_REMOTE_NAME             "Nintendo RVL-CNT-01"
+#define WII_PACKET_TYPES            0xff1e
 #define SDP_PSM                     0x01
 #define WII_CONTROL_PSM             0x11
 #define WII_DATA_PSM                0x13
@@ -67,7 +68,9 @@ void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
 #define WII_SDP_MTU                 256
 #define WII_SDP_FLUSH_TIMEOUT       0xffff
-#define WII_REMOTE_MTU              185
+#define WII_REMOTE_SDP_MTU          48
+#define WII_REMOTE_CONTROL_MTU      185
+#define WII_REMOTE_DATA_MTU         185
 
 #define WII_MTU                     640
 #define WII_FLUSH_TIMEOUT           0xffff
@@ -112,9 +115,9 @@ typedef enum
     WII_CONSOLE_POWER_OFF_PENDING,
     WII_CONSOLE_POWER_OFF_CONNECTED,
     //WII_CONSOLE_POWER_OFF_CONTROL_OPEN,
-    WII_CONSOLE_POWER_OFF_DATA_OPENING,
-    WII_CONSOLE_POWER_OFF_DATA_TRANSFER,
-    WII_CONSOLE_POWER_OFF_DISCONNECTING,
+    //WII_CONSOLE_POWER_OFF_DATA_OPENING,
+    //WII_CONSOLE_POWER_OFF_DATA_TRANSFER,
+    //WII_CONSOLE_POWER_OFF_DISCONNECTING,
     WII_REMOTE_CONNECTION_PENDING = 50,
     WII_REMOTE_PAIRING_PENDING,
     WII_REMOTE_PAIRING_STARTED,
@@ -125,8 +128,8 @@ typedef enum
     WII_MITM_DISCOVERY,
     WII_MITM_DISCOVERED,
     WII_MITM_PAIRING_PENDING,
-    WII_MITM_CONNECTING,
-    WII_MITM_CONNECTING_DUAL,
+    WII_MITM_CONNECTING_WII,
+    WII_MITM_CONNECTING_WII_REMOTE,
     WII_MITM_CONNECTED
 } 
 WII_CONTROLLER_STATE;

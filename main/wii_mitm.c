@@ -104,7 +104,7 @@ void handle_wii_mitm_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACKET* pac
         printf("accepting wii connection from %s...\n", bda_to_string(wii_addr));
         memcpy(wii_addr, packet->addr, BDA_SIZE);
         nvs_set_blob(wii_controller.nvs_handle, WII_ADDR_BLOB_NAME, wii_addr, BDA_SIZE);
-        wii_controller.state = WII_MITM_CONNECTING;
+        wii_controller.state = WII_MITM_CONNECTING_WII;
         post_bt_packet(create_hci_accept_connection_request_packet(packet->addr, HCI_ROLE_SLAVE));
     }
     else if (wii_controller.state == WII_MITM_CONNECTION_PENDING &&
@@ -112,7 +112,7 @@ void handle_wii_mitm_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACKET* pac
         cod == WII_REMOTE_COD)
     {
         printf("accepting wii remote connection from %s...\n", bda_to_string(packet->addr));
-        wii_controller.state = WII_MITM_CONNECTING_DUAL;
+        wii_controller.state = WII_MITM_CONNECTING_WII_REMOTE;
         post_bt_packet(create_hci_accept_connection_request_packet(packet->addr, HCI_ROLE_MASTER));
     }
     else
@@ -126,7 +126,7 @@ void handle_wii_mitm_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* p
 {
     if (packet->status == 0)
     {
-        if (wii_controller.state == WII_MITM_CONNECTING_DUAL)
+        if (wii_controller.state == WII_MITM_CONNECTING_WII_REMOTE)
         {
             if (memcmp(packet->addr, wii_addr, BDA_SIZE) == 0)
             {
@@ -147,7 +147,7 @@ void handle_wii_mitm_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PACKET* p
                 wii_mitm_flush_queue();
             }
         }
-        else if (wii_controller.state == WII_MITM_CONNECTING)
+        else if (wii_controller.state == WII_MITM_CONNECTING_WII)
         {
             wii_controller.wii_con_handle = packet->con_handle;
             //wii_controller.state = WII_MITM_CONNECTED;
@@ -274,7 +274,7 @@ void handle_wii_mitm_remote_link_key_request(HCI_LINK_KEY_REQUEST_EVENT_PACKET* 
 
     switch (wii_controller.state)
     {
-        case WII_MITM_CONNECTING_DUAL:
+        case WII_MITM_CONNECTING_WII_REMOTE:
         {
             uint8_t link_key[HCI_LINK_KEY_SIZE];
             size_t size = HCI_LINK_KEY_SIZE;
@@ -359,7 +359,7 @@ void wii_mitm()
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE | HCI_INQUIRY_SCAN_ENABLE));
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
     post_bt_packet(create_hci_host_buffer_size_packet(HOST_ACL_BUFFER_SIZE, HOST_SCO_BUFFER_SIZE, HOST_NUM_ACL_BUFFERS, HOST_NUM_SCO_BUFFERS));
-    //post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
+    post_bt_packet(create_hci_set_controller_to_host_flow_control_packet(HCI_FLOW_CONTROL_ACL));
 
     //post_bt_packet(create_hci_write_authentication_enable(1));
 

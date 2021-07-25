@@ -1,7 +1,7 @@
 #ifndef BTDUMP_H
 #define BTDUMP_H
 
-#define DUMP_WIDTH 32
+#define DUMP_WIDTH 36
 
 uint32_t read_uint24(const uint8_t* p);
 uint16_t read_uint16(const uint8_t* p);

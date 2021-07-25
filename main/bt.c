@@ -119,13 +119,23 @@ BT_PACKET_ENVELOPE* create_hci_create_connection_packet(const bd_addr_t addr, ui
     BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_CREATE_CONNECTION, PARAMS_SIZE(HCI_CREATE_CONNECTION_PACKET));
     HCI_CREATE_CONNECTION_PACKET* packet = (HCI_CREATE_CONNECTION_PACKET*)env->packet;
 
-    //write_bda(packet->addr, addr);
     memcpy(packet->addr, addr, BDA_SIZE);
     packet->packet_type = packet_type;
     packet->psrm = psrm;
     packet->reserved = 0;
-    write_uint16_be((uint8_t*)&packet->clock_offset, (clock_offset_valid ? 0x8000 : 0) | clock_offset);
+    packet->clock_offset_valid = clock_offset_valid;
+    packet->clock_offset = clock_offset;
     packet->allow_role_switch = allow_role_switch;
+
+    return env;
+}
+
+BT_PACKET_ENVELOPE* create_hci_create_connection_cancel_packet(const bd_addr_t addr)
+{
+    BT_PACKET_ENVELOPE* env = create_hci_cmd_packet(HCI_OPCODE_CREATE_CONNECTION_CANCEL, PARAMS_SIZE(HCI_CREATE_CONNECTION_CANCEL_PACKET));
+    HCI_CREATE_CONNECTION_CANCEL_PACKET* packet = (HCI_CREATE_CONNECTION_CANCEL_PACKET*)env->packet;
+
+    memcpy(packet->addr, addr, BDA_SIZE);
 
     return env;
 }

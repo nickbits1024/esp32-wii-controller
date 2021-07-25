@@ -819,7 +819,7 @@ void dump_packet(uint8_t io_direction, const uint8_t* packet, uint16_t size)
             }
 
             uint16_t local_channel = l2cap_packet->channel;
-            if (acl_packet->packet_boundary_flag == L2CAP_PB_FRAGMENT || acl_packet->packet_boundary_flag == 0)
+            if (acl_packet->packet_boundary_flag == L2CAP_PB_FRAGMENT)
             {
                 local_channel = last_channel[io_direction - 1];
             }
@@ -840,7 +840,7 @@ void dump_packet(uint8_t io_direction, const uint8_t* packet, uint16_t size)
             //     }
             // }
 
-            if (acl_packet->packet_boundary_flag == L2CAP_PB_FIRST_FLUSH || acl_packet->packet_boundary_flag == 0)
+            if (acl_packet->packet_boundary_flag == L2CAP_PB_FIRST_FLUSH || acl_packet->packet_boundary_flag == L2CAP_PB_DEFAULT)
             {
                 last_channel[io_direction - 1] = l2cap_packet->channel;
                 switch (local_channel)
