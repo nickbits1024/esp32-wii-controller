@@ -159,7 +159,7 @@ void handle_wii_remote_connection_request(HCI_CONNECTION_REQUEST_EVENT_PACKET* p
     {
         printf("accepting wii remote connection...\n");
         wii_controller.state = WII_REMOTE_PAIRING_COMPLETE;
-        post_bt_packet(create_hci_accept_connection_request_packet(packet->addr, HCI_ROLE_MASTER));
+        post_bt_packet(create_hci_accept_connection_request_packet(packet->addr, HCI_ROLE_SLAVE));
     }
     else
     {
@@ -332,6 +332,9 @@ void handle_wii_remote_l2cap_config_request(L2CAP_CONFIG_REQUEST_PACKET* request
         case SDP_LOCAL_CID:
             wii_remote_sdp_query();
             post_bt_packet(create_l2cap_disconnection_request_packet(request_packet->con_handle, wii_controller.sdp_cid, SDP_LOCAL_CID));
+            break;
+        case WII_DATA_LOCAL_CID:
+            wii_remote_connected();
             break;
     }
 }
@@ -618,7 +621,12 @@ void wii_remote_sdp_query()
 
 void wii_remote_host()
 {
+    // post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH | 
+    //                                                                     HCI_LINK_POLICY_ENABLE_SNIFF_MODE | 
+    //                                                                     HCI_LINK_POLICY_ENABLE_HOLD_MODE |
+    //                                                                     HCI_LINK_POLICY_ENABLE_PARK_STATE));
     post_bt_packet(create_hci_write_default_link_policy_settings_packet(0));
+
     post_bt_packet(create_hci_write_scan_enable_packet(HCI_PAGE_SCAN_ENABLE));
     post_bt_packet(create_hci_write_pin_type_packet(HCI_FIXED_PIN_TYPE));
     post_bt_packet(create_hci_write_class_of_device_packet(WII_COD));

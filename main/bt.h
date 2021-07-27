@@ -381,8 +381,10 @@ typedef uint8_t bd_addr_t[BDA_SIZE];
 
 #define OUTPUT_PACKET 1
 #define INPUT_PACKET 2
+#define INPUT2_PACKET 3
+#define OUTPUT2_PACKET 4
 
-#define IO_DIRECTION_TAG(x)             ((x) == INPUT_PACKET ? "EVT" : "CMD")
+#define IO_DIRECTION_TAG(x)             ((x) == INPUT_PACKET ? "EVT" : (x) == INPUT2_PACKET ? "EV2" : (x) == OUTPUT2_PACKET ? "CM2" : "CMD")
 
 #ifdef _WINDOWS_
 typedef DWORD uint32_t;

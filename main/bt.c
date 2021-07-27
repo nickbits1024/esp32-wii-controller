@@ -1,4 +1,8 @@
-#include "wii_controller.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+#include "freertos/FreeRTOS.h"
+#include "bt.h"
 
 uint8_t l2cap_identifier = 1;
 

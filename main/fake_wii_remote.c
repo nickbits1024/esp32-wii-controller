@@ -27,29 +27,45 @@ void handle_fake_wii_remote_connection_complete(HCI_CONNECTION_COMPLETE_EVENT_PA
 {
     switch (packet->status)
     {
-    case ERROR_CODE_SUCCESS:
-        wii_controller.wii_con_handle = packet->con_handle;
-        switch (wii_controller.state)
-        {
-            case WII_CONSOLE_PAIRING_PENDING:
-                memcpy(wii_addr, packet->addr, BDA_SIZE);
-                wii_controller.state = WII_CONSOLE_PAIRING_STARTED;
-                break;
-            case WII_CONSOLE_POWER_OFF_PENDING:
-                wii_controller.state = WII_CONSOLE_POWER_OFF_CONNECTED;
-                open_control_channel(packet->con_handle);
-                break;
-            case WII_CONSOLE_POWER_ON_PENDING:
-                post_bt_packet(create_hci_disconnect_packet(packet->con_handle, ERROR_CODE_REMOTE_DEVICE_TERMINATED_CONNECTION_DUE_TO_POWER_OFF));
-                break;
-            default:
-                break;
-        }
+        case ERROR_CODE_SUCCESS:
+            wii_controller.wii_con_handle = packet->con_handle;
+            switch (wii_controller.state)
+            {
+                case WII_CONSOLE_QUERY_POWER_STATE:
+                    printf("wii is %s\n", wii_controller.wii_on ? "on" : "off");
+                    post_bt_packet(create_hci_disconnect_packet(packet->con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION));
+                    break;
+                case WII_CONSOLE_PAIRING_PENDING:
+                    memcpy(wii_addr, packet->addr, BDA_SIZE);
+                    wii_controller.state = WII_CONSOLE_PAIRING_STARTED;
+                    break;
+                case WII_CONSOLE_POWER_OFF_PENDING:
+                    wii_controller.state = WII_CONSOLE_POWER_OFF_CONNECTED;
+                    open_control_channel(packet->con_handle);
+                    break;
+                case WII_CONSOLE_POWER_ON_PENDING:
+                    post_bt_packet(create_hci_disconnect_packet(packet->con_handle, ERROR_CODE_REMOTE_DEVICE_TERMINATED_CONNECTION_DUE_TO_POWER_OFF));
+                    break;
+                default:
+                    break;
+            }
+            break;
+        case ERROR_CODE_ACL_CONNECTION_ALREADY_EXISTS:
+            vTaskDelay(2000 / portTICK_PERIOD_MS);
+            printf("retrying connection...\n");
+            connect();
+            break;
+    }
+}
+
+void handle_fake_wii_remote_role_change(HCI_ROLE_CHANGE_EVENT_PACKET* packet)
+{
+    switch (wii_controller.state)
+    {
+    case WII_CONSOLE_QUERY_POWER_STATE:
+        wii_controller.wii_on = packet->new_role == HCI_ROLE_SLAVE;
         break;
-    case ERROR_CODE_ACL_CONNECTION_ALREADY_EXISTS:
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-        printf("retrying connection...\n");
-        connect();
+    default:
         break;
     }
 }
@@ -65,9 +81,7 @@ void handle_fake_wii_remote_link_key_request(HCI_LINK_KEY_REQUEST_EVENT_PACKET* 
             printf("rejecting link key request from %s...\n", bda_to_string(packet->addr));
             post_bt_packet(create_hci_link_key_request_negative_packet(packet->addr));
             break;
-        case WII_CONSOLE_POWER_ON_PENDING:
-        case WII_CONSOLE_POWER_OFF_PENDING:
-        case WII_CONSOLE_POWER_OFF_CONNECTED:
+        default:
         {
             uint8_t link_key[HCI_LINK_KEY_SIZE];
             size_t size = HCI_LINK_KEY_SIZE;
@@ -84,8 +98,6 @@ void handle_fake_wii_remote_link_key_request(HCI_LINK_KEY_REQUEST_EVENT_PACKET* 
             }
             break;
         }
-        default:
-            break;
     }
 }
 
@@ -603,24 +615,21 @@ void handle_fake_wii_remote_data_channel(uint16_t con_handle, HID_REPORT_PACKET*
 
 void handle_fake_wii_mode_change(HCI_MODE_CHANGE_EVENT_PACKET* packet)
 {
-    switch (wii_controller.state)
+    if (packet->current_mode == HCI_MODE_SNIFF)
     {
-    case WII_CONSOLE_PAIRING_STARTED:
-        if (packet->current_mode == HCI_MODE_SNIFF)
+        switch (wii_controller.state)
         {
-            wii_controller.state = WII_CONSOLE_PAIRING_COMPLETE;
-            printf("pairing complete!\n");
-            send_disconnect(packet->con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION);
+            case WII_CONSOLE_PAIRING_STARTED:
+                wii_controller.state = WII_CONSOLE_PAIRING_COMPLETE;
+                printf("pairing complete!\n");
+                send_disconnect(packet->con_handle, ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION);
+                break;
+            case WII_CONSOLE_POWER_OFF_CONNECTED:
+                send_power_toggle_disconnect(packet->con_handle);
+                break;
+            default:
+                break;
         }
-        break;
-    case WII_CONSOLE_POWER_OFF_CONNECTED:
-        if (packet->current_mode == HCI_MODE_SNIFF)
-        {
-            send_power_toggle_disconnect(packet->con_handle);
-        }
-        break;
-    default:
-        break;
     }
 }
 
@@ -639,6 +648,9 @@ void fake_wii_remote_packet_handler(uint8_t* packet, uint16_t size)
                     break;
                 case HCI_EVENT_CONNECTION_COMPLETE:
                     handle_fake_wii_remote_connection_complete((HCI_CONNECTION_COMPLETE_EVENT_PACKET*)packet);
+                    break;
+                case HCI_EVENT_ROLE_CHANGE:
+                    handle_fake_wii_remote_role_change((HCI_ROLE_CHANGE_EVENT_PACKET*)packet);
                     break;
                 case HCI_EVENT_LINK_KEY_REQUEST:
                     handle_fake_wii_remote_link_key_request((HCI_LINK_KEY_REQUEST_EVENT_PACKET*)packet);
@@ -716,14 +728,18 @@ void connect_and_power_on()
     connect();
 }
 
+void query_power_state()
+{
+    wii_controller.state = WII_CONSOLE_QUERY_POWER_STATE;
+    connect();
+}
+
 
 void fake_wii_remote()
 {
-    post_bt_packet(create_hci_write_default_link_policy_settings_packet(HCI_LINK_POLICY_ENABLE_ROLE_SWITCH | 
-                                                                        HCI_LINK_POLICY_ENABLE_SNIFF_MODE | 
-                                                                        HCI_LINK_POLICY_ENABLE_SNIFF_MODE | 
-                                                                        HCI_LINK_POLICY_ENABLE_HOLD_MODE |
-                                                                        HCI_LINK_POLICY_ENABLE_PARK_STATE));
+    post_bt_packet(create_hci_write_default_link_policy_settings_packet(
+        HCI_LINK_POLICY_ENABLE_ROLE_SWITCH |
+        HCI_LINK_POLICY_ENABLE_SNIFF_MODE));
     post_bt_packet(create_hci_write_class_of_device_packet(WII_REMOTE_COD));
     post_bt_packet(create_hci_write_local_name(WII_REMOTE_NAME));
     post_bt_packet(create_hci_current_iac_lap_packet(GAP_IAC_LIMITED_INQUIRY));
@@ -735,12 +751,14 @@ void fake_wii_remote()
     esp_err_t ret = nvs_get_blob(wii_controller.nvs_handle, WII_ADDR_BLOB_NAME, wii_addr, &size);
     if (ret == ESP_OK && size == BDA_SIZE)
     {
-        printf("stored wii at %s\n", bda_to_string(wii_addr));
-        connect_and_power_on();
-        printf("waiting 30s to power off\n");
-        vTaskDelay(30000 / portTICK_PERIOD_MS);
-        printf("powering off...\n");
-        connect_and_power_off();        
+        // printf("stored wii at %s\n", bda_to_string(wii_addr));
+        // connect_and_power_on();
+        // printf("waiting 30s to power off\n");
+        // vTaskDelay(30000 / portTICK_PERIOD_MS);
+        // printf("powering off...\n");
+        //connect_and_power_off();
+
+        query_power_state();
     }
     else
     {

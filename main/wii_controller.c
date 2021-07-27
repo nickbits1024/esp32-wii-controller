@@ -239,18 +239,18 @@ void peek_number_of_completed_packets(uint8_t* packet, uint16_t size)
     uint8_t* p = packet + 4;
     for (int i = 0; i < num_handles; i++)
     {
-        uint16_t con_handle = read_uint16(p);
+        //uint16_t con_handle = read_uint16(p);
         uint16_t num_completed = read_uint16(p + 2);
 
         //printf("peek number_of_completed_packets handle 0x%x completed %u\n", con_handle, num_completed);
 
-        xSemaphoreGive(all_controller_buffers_sem);
-        all_controller_buffers_sem_count++;
+        for (int j = 0; j < num_completed; j++)
+        {
+            xSemaphoreGive(all_controller_buffers_sem);
+            all_controller_buffers_sem_count++;
 
-        // for (int j = 0; j < num_completed; j++)
-        // {
-        //     xSemaphoreGive(get_queue_sem(con_handle, 1));
-        // }
+            //xSemaphoreGive(get_queue_sem(con_handle, 1));
+        }
 
         p += 4;
     }

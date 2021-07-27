@@ -114,6 +114,7 @@ typedef enum
     WII_CONSOLE_POWER_ON_PENDING,
     WII_CONSOLE_POWER_OFF_PENDING,
     WII_CONSOLE_POWER_OFF_CONNECTED,
+    WII_CONSOLE_QUERY_POWER_STATE,
     //WII_CONSOLE_POWER_OFF_CONTROL_OPEN,
     //WII_CONSOLE_POWER_OFF_DATA_OPENING,
     //WII_CONSOLE_POWER_OFF_DATA_TRANSFER,
@@ -149,6 +150,7 @@ typedef struct
     uint16_t sdp_cid;
     uint16_t control_cid;
     uint16_t data_cid;
+    bool wii_on;
 } WII_CONTROLLER;
 
 typedef struct
