@@ -37,7 +37,9 @@
         "system_error": "c",
         "types.h": "c",
         "stdbool.h": "c",
-        "freertos.h": "c"
+        "freertos.h": "c",
+        "queue.h": "c",
+        "nvs_flash.h": "c"
     },
     "idf.flashType": "UART",
     "idf.portWin": "COM3"

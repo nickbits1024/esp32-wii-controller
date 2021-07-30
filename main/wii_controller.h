@@ -21,8 +21,8 @@
 //#define WII_REMOTE_HOST
 //#define WII_MITM
 
-#include "bt.h"
-#include "bt_dump.h"
+#include "bthci.h"
+#include "btdump.h"
 
 void wii_controller_init();
 int queue_packet_handler(uint8_t* packet, uint16_t size);
@@ -48,7 +48,7 @@ void post_l2ap_config_mtu_request(uint16_t con_handle, uint16_t remote_cid, uint
 void post_l2ap_config_mtu_flush_timeout_request(uint16_t con_handle, uint16_t remote_cid, uint16_t mtu, uint16_t flush_timeout);
 void dump_l2cap_config_options(uint8_t* options, uint16_t options_size);
 
-#define WII_ADDR_BLOB_NAME  "wii_addr"
+#define WII_ADDR_BLOB_NAME          "wii_addr"
 
 #define HOST_ACL_BUFFER_SIZE         0xffff
 #define HOST_NUM_ACL_BUFFERS         6
